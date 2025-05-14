@@ -1,0 +1,122 @@
+Facebook Meta Ads Automation System
+
+Overview
+Automates the collection and insertion of Facebook Meta Ads metrics into Google Sheets. The pipeline performs account and page discovery, collects detailed page and post insights, and updates spreadsheets in a structured and validated manner.
+
+--------------------------------------------------------------------------------------------------------------
+
+Architecture
+
+Components
+    SpreadsheetController**: Interfaces with Google Sheets to read and write data.
+    FacebookController**: Handles API requests and response parsing from Facebook Meta.
+
+Validation Strategy
+All steps are guarded by validation logic:
+    Input format and presence checks
+    Facebook API response validation
+    Output schema verification before spreadsheet insertion
+    Retry mechanism of up to **3 attempts** on failed API or sheet operations
+
+--------------------------------------------------------------------------------------------------------------
+
+Workflow
+Step 1: Fetch Account List
+    Function**: `SpreadsheetController.get_facebook_accounts()`
+    
+    Validation**:
+        Spreadsheet accessibility
+        Required headers: `ACCOUNT_ID`, `ACCESS_TOKEN`
+        Valid `ACCOUNT_ID | ACCESS_TOKEN` format
+
+Step 2: Get Pages and Groups
+Function**: `FacebookController.get_facebook_pages()`
+
+Validation**:
+    Account token check
+    Response must contain `page_id`, `access_token`
+
+Step 3: Fetch Page Metrics
+    Function**: `FacebookController.get_facebook_page_metrics()`
+
+    Metrics Collected**:
+        TOTAL FOLLOWERS
+        DAILY FOLLOWERS GAIN
+        PAGE POST ENGAGEMENTS
+        TOTAL IMPRESSIONS
+        TOTAL PAGE VIEWS
+        PAGE LIKES
+        NEW PAGE LIKES
+        TOTAL REACH
+
+    Validation**:
+        Metric presence
+        All values numeric and non-null
+
+Step 4: Fetch Posts
+    Function**: `FacebookController.fetch_all_posts_for_pages()`
+    
+    Range**: From `2025-01-01` to today
+    
+    Validation**:
+        Presence of `post_id`, `created_time`
+        Post eligibility (posts)
+
+Step 5: Fetch Post Insights
+    Function**: `FacebookController.process_all_pages_insights(posts)`
+    
+    Metrics per Post/Day**:
+        Reach
+        Impressions
+        Reactions
+    
+    Validation**:
+        No duplicate dates
+        All metrics numeric
+
+Step 6: Update Google Sheets
+    Transfer Headers
+    
+    Function**: `SpreadsheetController.transfer_insight_header_only(...)`
+    
+    Validation**:
+        Format: `YYYY-MM-DD | Reach | Impressions | Reactions`
+        Header duplication check
+
+    Transfer Data
+        Function**: `SpreadsheetController.transfer_insight_data(...)`
+        Validation**:
+            Alignment with headers
+            Batch size control
+            Retry on API rate limits (up to 3 attempts)
+
+---------------------------------------------------------------------------------------------------------------------
+
+Data Format
+Sheet Layout
+    Rows 1-2: Dynamic headers and post url based on posts
+    Row 3: Insight headers (auto-created, one column per date with format: `YYYY-MM-DD`)
+    Rows 4+: Insight data inserted **by column**
+
+Post Data Structure
+Each **column** represents one date with the following horizontal layout:
+--------------------------------------------------------------------------
+| date | post_id  | post_id  | post_id  | post_id  | post_id  | post_id  |  
+|      | post_url | post_url | post_url | post_url | post_url | post_url |
+|      | insights | insights | insights | insights | insights | insights |    
+--------------------------------------------------------------------------
+
+Each insight set is appended horizontal under the respective post_id.
+
+------------------------------------------------------------------------------------------------------------------
+
+Error Handling
+
+| Step     | Error          | Response                      |
+| -------- | -------------- | ----------------------------- |
+| Accounts | Sheet missing  | Log and skip                  |
+| Pages    | No permissions | Log and skip                  |
+| Insights | Missing fields | Skip and continue             |
+| Sheets   | API limit      | Delay and retry up to 3 times |
+
+------------------------------------------------------------------------------------------------------------------

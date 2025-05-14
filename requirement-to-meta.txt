@@ -1,0 +1,34 @@
+Select Others and Business Type on creation
+Select Marketing API
+
+Permisions:
+pages_show_list	- Applies to all objects
+ads_management - Applies to all objects
+ads_read - Applies to all objects
+business_management	- Applies to all objects
+pages_read_engagement - Applies to all objects
+pages_read_user_content - for post insights
+
+for page followers:
+1. me?fields=followers_count - total folowers count
+
+for posts
+1. get : {page_id}/posts - return collection of posts with post_id
+2. get : {post_id}/insights?metric=post_impressions,post_impressions_unique,post_clicks,post_reactions_by_type_total
+
+NEED to checks
+{page_id}/insights/page_follows
+
+WORKING ON JEETBUZZ PAGE POSTS
+quick url format to view: https://www.facebook.com/{page_id}/posts/{post_id}?view=insights
+
+
+
+Page insights:
+
+
+DATE FORMATE:
+#ON DEPLOYED
+today = datetime.now(timezone.utc).date()
+# yesterday = today - timedelta(days=1)
+today_str = today.strftime('%d/%m/%Y') #Yesterday date
