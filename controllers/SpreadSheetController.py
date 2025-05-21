@@ -1,12 +1,14 @@
 import requests
 import os
 import time
+import re
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2.service_account import Credentials
 from config.config import Config
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 # Load environment variables
 load_dotenv()
@@ -115,7 +117,7 @@ class SpreadsheetController:
         creds = Credentials.from_service_account_info(config_dict, scopes=scope)
         return build('sheets', 'v4', credentials=creds)
 
-    def _get_sheet_id(self, service, spreadsheet_id, tab_name):
+    def _get_sheet_id_copy(self, service, spreadsheet_id, tab_name):
         """Get the sheet ID for the given tab name."""
         print(f"Getting sheet ID for tab '{tab_name}'...")
         spreadsheet_meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
@@ -532,11 +534,404 @@ class SpreadsheetController:
             print(f"Failed to update header: {str(e)}")
             return False
 
+    def extract_facebook_post_id(self,url: str) -> Optional[str]:
+        """
+        Extracts the post ID from a Facebook post URL.
+        
+        Supports formats like:
+        - https://www.facebook.com/{page_id}/posts/{page_id}_{post_id}
+        - https://www.facebook.com/{page_id}/posts/{post_id}
+        - https://www.facebook.com/story.php?story_fbid={post_id}&id={page_id}
+        
+        Returns:
+            post_id (str) if found, else None
+        """
+        # Pattern: /posts/{page_id}_{post_id}
+        match = re.search(r'/posts/\d+_(\d+)', url)
+        if match:
+            return match.group(1)
 
+        # Pattern: /posts/{post_id}
+        match = re.search(r'/posts/(\d+)', url)
+        if match:
+            return match.group(1)
 
-    def transfer_insight_data(self, spreadsheet_id: str, tab_name: str, insights_data: list, date: str = None):
+        # Pattern: story.php?story_fbid={post_id}
+        match = re.search(r'story_fbid=(\d+)', url)
+        if match:
+            return match.group(1)
+
+        return None
+    
+    def trim_sheet_rows(self, spreadsheet_id: str, tab_name: str, buffer: int = 10):
         try:
-            print(f"\n=== Transfer to {tab_name} for date: {date or 'today'} ===")
+            service = self._initialize_google_sheets_service()
+            sheet = service.spreadsheets()
+
+            metadata = sheet.get(spreadsheetId=spreadsheet_id).execute()
+            sheet_info = next(
+                s for s in metadata['sheets'] if s['properties']['title'] == tab_name
+            )
+            sheet_id = sheet_info['properties']['sheetId']
+
+            # Check how many rows are used based on column A
+            result = sheet.values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f"{tab_name}!A:A",
+                majorDimension="COLUMNS"
+            ).execute()
+            used_rows = len(result.get('values', [[]])[0]) or 1
+            new_row_count = used_rows + buffer
+
+            total_cells = new_row_count * 20  # assuming 10 columns
+            print(f"📊 Estimated cell usage after trim: {total_cells} cells")
+
+            request = {
+                'updateSheetProperties': {
+                    'properties': {
+                        'sheetId': sheet_id,
+                        'gridProperties': {
+                            'rowCount': new_row_count,
+                            'columnCount': 20  # fixed
+                        }
+                    },
+                    'fields': 'gridProperties(rowCount,columnCount)'
+                }
+            }
+
+            sheet.batchUpdate(spreadsheetId=spreadsheet_id, body={'requests': [request]}).execute()
+            print(f"🧹 Trimmed sheet '{tab_name}' to {new_row_count} rows")
+            return True
+
+        except Exception as e:
+            print(f"🔴 Failed to trim: {str(e)}")
+            return False
+
+    
+    def calculate_day_deltas(self, post_age, insights, existing_row):
+        """
+        Calculates reach, impressions, and reactions deltas for 3, 7, and 30 days.
+        """
+        print(f"Calculating deltas for post age: {post_age} days")
+
+        def safe_int(value, fallback=0):
+            try:
+                return int(value)
+            except:
+                return fallback
+
+        reach_3 = safe_int(existing_row[3]) if len(existing_row) > 3 else 0
+        reach_7 = safe_int(existing_row[4]) if len(existing_row) > 4 else 0
+        imp_3 = safe_int(existing_row[7]) if len(existing_row) > 7 else 0
+        imp_7 = safe_int(existing_row[8]) if len(existing_row) > 8 else 0
+        react_3 = safe_int(existing_row[11]) if len(existing_row) > 11 else 0
+        react_7 = safe_int(existing_row[12]) if len(existing_row) > 12 else 0
+
+        reach_now = insights.get('reach', 0)
+        imp_now = insights.get('impressions', 0)
+        react_now = insights.get('reactions', 0)
+
+        result = {
+            "reach_3": '',
+            "reach_7": '',
+            "reach_30": '',
+            "imp_3": '',
+            "imp_7": '',
+            "imp_30": '',
+            "react_3": '',
+            "react_7": '',
+            "react_30": ''
+        }
+
+        # 3-day snapshot (if old enough)
+        if post_age >= 3:
+            result["reach_3"] = str(reach_3) if reach_3 > 0 else str(reach_now)
+            result["imp_3"] = str(imp_3) if imp_3 > 0 else str(imp_now)
+            result["react_3"] = str(react_3) if react_3 > 0 else str(react_now)
+
+        # 7-day delta (keep 3-day too)
+        if post_age >= 7:
+            result["reach_3"] = str(reach_3) if reach_3 > 0 else str(reach_now)
+            result["imp_3"] = str(imp_3) if imp_3 > 0 else str(imp_now)
+            result["react_3"] = str(react_3) if react_3 > 0 else str(react_now)
+
+            result["reach_7"] = str(max(reach_now - reach_3, 0)) if reach_3 else ''
+            result["imp_7"] = str(max(imp_now - imp_3, 0)) if imp_3 else ''
+            result["react_7"] = str(max(react_now - react_3, 0)) if react_3 else ''
+
+        # 30-day delta (keep 3-day and 7-day too)
+        if post_age >= 30:
+            result["reach_3"] = str(reach_3) if reach_3 > 0 else str(reach_now)
+            result["reach_7"] = str(reach_7) if reach_7 > 0 else str(max(reach_now - reach_3, 0)) if reach_3 else ''
+            result["reach_30"] = str(max(reach_now - (reach_3 + reach_7), 0)) if (reach_3 or reach_7) else ''
+
+            result["imp_3"] = str(imp_3) if imp_3 > 0 else str(imp_now)
+            result["imp_7"] = str(imp_7) if imp_7 > 0 else str(max(imp_now - imp_3, 0)) if imp_3 else ''
+            result["imp_30"] = str(max(imp_now - (imp_3 + imp_7), 0)) if (imp_3 or imp_7) else ''
+
+            result["react_3"] = str(react_3) if react_3 > 0 else str(react_now)
+            result["react_7"] = str(react_7) if react_7 > 0 else str(max(react_now - react_3, 0)) if react_3 else ''
+            result["react_30"] = str(max(react_now - (react_3 + react_7), 0)) if (react_3 or react_7) else ''
+
+
+        return result
+    
+    
+    def safe_execute(self, request, retries=3, delay=5):
+        for attempt in range(retries):
+            try:
+                return request.execute()
+            except (ConnectionResetError, HttpError) as e:
+                wait = delay * (2 ** attempt)  # exponential backoff
+                print(f"[Retry {attempt + 1}] Error: {e}. Waiting {wait}s before retry...")
+                time.sleep(wait)
+        raise Exception("Google Sheets API call failed after multiple retries")
+
+    
+    def transfer_insight_data(self, spreadsheet_id: str, tab_name: str, insights_data: list, followers: dict, date: str = None):
+        try:
+            print(f"\n📅 DAILY INSIGHTS DUMP FOR {date or 'today'}")
+            service = self._initialize_google_sheets_service()
+            sheet = service.spreadsheets()
+
+            # 1. Set up dates (YYYY-MM-DD)
+            today = datetime.now(timezone.utc).date()
+            processing_date = date or today.strftime('%Y-%m-%d')
+            yesterday = (today - timedelta(days=1))
+            compare_date = (today - timedelta(days=2)).strftime('%Y-%m-%d')  # ⬅️ string now
+            if not insights_data:
+                print("⚠️ No posts processed today")
+                return False
+
+            # 2. Check if processing_date already exists in Column H (row 2)
+            existing_data = sheet.values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f"{tab_name}!Q3",
+                majorDimension="ROWS"
+            ).execute().get('values', [[]])
+
+            if existing_data and existing_data[0] and existing_data[0][0] == yesterday:
+                print(f"⏭️ Data for {yesterday} already exists - skipping")
+                return True
+
+            # i need to fetched all the data on last update 
+            # then performed the checking based on post_id located on each row column G3 and below if matched i need to get that row print it for now
+            # on G3 its a post url thats why i have this function extract_facebook_post_id its returning post_id
+            # 2.5 Fetch all existing post URLs (Column G from G3 downward) and rows
+            existing_rows = sheet.values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f"{tab_name}!A3:R",
+                majorDimension="ROWS"
+            ).execute().get('values', [])
+
+            # 3. Prepare today's data
+            new_rows = []
+            for post in insights_data:
+                insights = post.get('insights', {})
+                date_str = post.get('created_time', yesterday) # fallback to yesterday if missing
+                created_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S%z")
+                only_date = created_date.date().isoformat()  # 'YY-MM-DD'
+
+                # Convert only_date back to date object
+                posted_date = datetime.strptime(only_date, "%Y-%m-%d").date()
+                # Calculate post age
+                post_age = (yesterday - posted_date).days
+
+                # Convert insights post links into a set of post_ids
+                incoming_post_id = self.extract_facebook_post_id(post.get("post_link", ""))
+                # Match rows where:
+                deltas = {
+                    "reach_3": '',
+                    "reach_7": '',
+                    "reach_30": '',
+                    "imp_3": '',
+                    "imp_7": '',
+                    "imp_30": '',
+                    "react_3": '',
+                    "react_7": '',
+                    "react_30": ''
+                }
+                for row_index, row in enumerate(existing_rows):
+                    # Ensure row has at least 15 columns (to access P and Q)
+                    if len(row) >= 15:
+                        post_url = row[15]
+                        last_update_date = row[16]
+                        
+                        existing_post_id = self.extract_facebook_post_id(post_url)
+                        if existing_post_id == incoming_post_id and last_update_date == compare_date:
+                            print(f"🔁 Matched Row {row_index + 3} (Updated on {last_update_date}): {row}")
+                            deltas = self.calculate_day_deltas(post_age, insights, row)
+                            # break
+                        # else:
+                            # print(f"❌ No match for Row {row_index + 3}") 
+                    # break
+
+                # print(deltas)
+                if post_age == 3 and deltas['reach_3'] == '':
+                    deltas['reach_3'] = str(insights.get('reach', ''))
+                    deltas['imp_3'] = str(insights.get('impressions', ''))
+                    deltas['react_3'] = str(insights.get('reactions', ''))
+
+                if post_age == 7 and deltas['reach_7'] == '':
+                    deltas['reach_7'] = str(insights.get('reach', ''))
+                    deltas['imp_7'] = str(insights.get('impressions', ''))
+                    deltas['react_7'] = str(insights.get('reactions', ''))
+                            
+                new_rows.append([
+                    str(followers['followers_count']),
+                    only_date,
+                    post.get('message', '')[:500],
+                    deltas["reach_3"],
+                    deltas["reach_7"],
+                    deltas["reach_30"],
+                    str(insights.get('reach', 0)),
+                    deltas["imp_3"],
+                    deltas["imp_7"],
+                    deltas["imp_30"],
+                    str(insights.get('impressions', 0)),
+                    deltas["react_3"],
+                    deltas["react_7"],
+                    deltas["react_30"],
+                    str(insights.get('reactions', 0)),
+                    post.get('post_link', ''),
+                    yesterday.strftime('%Y-%m-%d'),
+                    post_age
+                ])
+
+            # Normalize row lengths (pad to equal length)
+            num_columns = max(len(row) for row in new_rows)
+            for row in new_rows:
+                while len(row) < num_columns:
+                    row.append("")
+
+            # 4. Get sheet ID
+            sheet_metadata = sheet.get(spreadsheetId=spreadsheet_id).execute()
+            sheet_id = next(s['properties']['sheetId'] 
+                    for s in sheet_metadata['sheets'] 
+                    if s['properties']['title'] == tab_name)
+
+            # 🔧 Expand the sheet's column count if needed
+            sheet_properties = next(s for s in sheet_metadata['sheets'] if s['properties']['title'] == tab_name)
+            current_columns = sheet_properties['properties']['gridProperties'].get('columnCount', 0)
+
+            if num_columns > current_columns:
+                print(f"📐 Expanding columns from {current_columns} → {num_columns}")
+                resize_request = {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": sheet_id,
+                            "gridProperties": {
+                                "columnCount": num_columns
+                            }
+                        },
+                        "fields": "gridProperties.columnCount"
+                    }
+                }
+            else:
+                resize_request = None
+
+            # 5. Create centered cell format
+            centered_format = {
+                "horizontalAlignment": "CENTER",
+                "verticalAlignment": "MIDDLE"
+            }
+            # Trim the sheet to avoid breaching 10M cell limit
+            self.trim_sheet_rows(spreadsheet_id, tab_name)
+            # 6. Batch requests (insert rows + format all cells)
+            requests = []
+
+            # ⬅️ Make sure to insert column resize request FIRST if needed
+            if resize_request:
+                requests.append(resize_request)
+
+            requests.extend([
+                # Insert blank rows
+                {
+                    'insertDimension': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'dimension': 'ROWS',
+                            'startIndex': 2,# Row 3 (0-based index 2)
+                            'endIndex': 2 + len(new_rows)
+                        },
+                        'inheritFromBefore': False
+                    }
+                },
+                # Apply center alignment to headers (row 1)
+                {
+                    'repeatCell': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': 0,
+                            'endRowIndex': 1,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': num_columns
+                        },
+                        'cell': {
+                            'userEnteredFormat': centered_format
+                        },
+                        'fields': 'userEnteredFormat(horizontalAlignment,verticalAlignment)'
+                    }
+                },
+                # Apply center alignment to new data
+                {
+                    'repeatCell': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': 2,
+                            'endRowIndex': 2 + len(new_rows),
+                            'startColumnIndex': 0,
+                            'endColumnIndex': num_columns
+                        },
+                        'cell': {
+                            'userEnteredFormat': centered_format
+                        },
+                        'fields': 'userEnteredFormat(horizontalAlignment,verticalAlignment)'
+                    }
+                },
+                # Insert data values
+                {
+                    'updateCells': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': 2,
+                            'endRowIndex': 2 + len(new_rows),
+                            'startColumnIndex': 0,
+                            'endColumnIndex': num_columns
+                        },
+                        'rows': [{'values': [
+                            {'userEnteredValue': {'stringValue': str(value)}}
+                            for value in row
+                        ]} for row in new_rows],
+                        'fields': 'userEnteredValue'
+                    }
+                }
+            ])
+
+            # 7. Execute batch update
+            request = sheet.batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={'requests': requests}
+            )
+            self.safe_execute(request)
+
+            print(f"✅ Added {len(new_rows)} centered records for {yesterday}")
+            return True
+
+        except HttpError as e:
+            print(f"🔴 Sheets API Error: {str(e)}")
+            if e.resp.status == 429:
+                print("⏳ Rate limited - waiting 60 seconds...")
+                time.sleep(60)
+                return self.transfer_insight_data(spreadsheet_id, tab_name, insights_data, followers, date)
+            return False
+        except Exception as e:
+            print(f"🔴 Critical Failure: {str(e)}")
+            return False
+
+    def transfer_insight_data_old(self, spreadsheet_id: str, tab_name: str, insights_data: list, followers, date: str = None):
+        try:
+            print(f"\n=== Transfer to {tab_name} for date: {date or 'today'}, Followers: {followers} ===")
             service = self._initialize_google_sheets_service()
             sheet = service.spreadsheets()
 

@@ -3,6 +3,7 @@ import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from collections import defaultdict
 # Calculate date range (Jan 1st to today)
 # Use UTC instead of local time
 end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
@@ -30,6 +31,7 @@ class FacebookController:
 
     def _get_posts_for_page(self, page_id, page_token, since, until):
         """Fetch posts for a single page with pagination handling"""
+        print(f"Requesting: {page_id}")
         all_posts = []
         url = f"{self.base_url}/{page_id}/posts"
         
@@ -72,6 +74,8 @@ class FacebookController:
         return all_posts
 
     def fetch_all_posts_for_pages(self, page_tokens, since, until):
+        print("Page Tokens")
+        print(page_tokens)
         all_posts = []
         for page_id, page_token in page_tokens:
             try:
@@ -200,7 +204,7 @@ class FacebookController:
 
     def process_all_pages_insights(self, posts_data):
         """Process insights for all posts while maintaining page associations"""
-        from collections import defaultdict
+        
         
         # Group posts by their source page
         page_groups = defaultdict(list)

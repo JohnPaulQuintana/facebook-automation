@@ -1,5 +1,5 @@
 Select Others and Business Type on creation
-Select Marketing API
+Select Marketing API ads api available also
 
 Permisions:
 pages_show_list	- Applies to all objects

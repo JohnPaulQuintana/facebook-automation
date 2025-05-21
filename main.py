@@ -58,6 +58,7 @@ def main():
         facebookController = FacebookController(FACEBOOK_BASE_API_URL ,account)
         pages = facebookController.get_facebook_pages()
         # print(pages)
+        pages_info = []  # Array of page info objects
         for page in pages.get('data', []):
             page_id = page.get('id', 0)
             page_access_token = page.get('access_token', 'xxxxxxxxxxxxx')
@@ -69,13 +70,28 @@ def main():
                 currency = matched_info[1]
                 brand = matched_info[2]
                 PAGE_TYPE = matched_info[4]
-
+                SPREAD_SHEET = matched_info[5]
+                # Extract spreadsheet ID
                 followers = facebookController.get_facebook_page_metrics(page_id, page_access_token, today_str)
                 print(f"Page ID: {page_id}, Followers: {followers}, Currency: {currency}, Brand: {brand}, Page Type: {PAGE_TYPE}")
 
                 # get the target column and brand name
                 target_column = spreadsheet.get_spreadsheet_column(GAINED_SHEET_ID,brand,currency,followers,followers['followers_count'], PAGE_TYPE)
                 # print(target_column)
+                # Build the page info object
+                page_info = {
+                    "page_id": page_id,
+                    "access_token": page_access_token,
+                    "currency": currency,
+                    "brand": brand,
+                    "page_type": PAGE_TYPE,
+                    "followers": followers,
+                    "target_column": target_column,
+                    "spreadsheet": SPREAD_SHEET
+                }
+
+                pages_info.append(page_info)
+
             else:
                 print(f"Page ID: {page_id} not found in page_info_list.")
 
@@ -86,13 +102,23 @@ def main():
         page_tokens = [(page['id'], page['access_token']) for page in pages.get('data', [])]
 
         # 2. Fetch all posts (now with page tracking)
-        # Get the current year and today’s date
-        current_year = datetime.now().year
-        today_date = datetime.now().strftime('%Y-%m-%d')
-        # Set the starting date to January 1st of the current year
-        start_date = f"{current_year}-01-01"
-        posts_data = facebookController.fetch_all_posts_for_pages(page_tokens, start_date, today_date)
+        # # Get the current year and today’s date
+        # current_year = datetime.now().year
+        # today_date = datetime.now().strftime('%Y-%m-%d')
+        # # Set the starting date to January 1st of the current year
+        # start_date = f"{current_year}-01-01"
+        #new updates
+        # Get today’s date
+        today = datetime.now()
+        today_date = today.strftime('%Y-%m-%d')
 
+        # Set the start date to 30 days before today
+        start_date = (today - timedelta(days=31)).strftime('%Y-%m-%d')  # 29 to include today as the 30th day
+
+        posts_data = facebookController.fetch_all_posts_for_pages(page_tokens, start_date, today_date)
+        
+        # print("This is post_data")
+        # print(posts_data)
         # 3. Process insights for ALL pages while maintaining associations
         all_insights = facebookController.process_all_pages_insights(posts_data)
         # print(all_insights)
@@ -156,17 +182,31 @@ def main():
             page_id = insight['source_page_id']
             insights_by_page[page_id].append(insight)
 
+        # Convert pages_info to a dict for fast lookup
+        pages_info_map = {page['page_id']: page for page in pages_info}
+
         # Now process each page_id group
         for page_id, insights in insights_by_page.items():
-            matched_info = next((item for item in pages_sp if item[3] == page_id), None)
+            # matched_info = next((item for item in pages_sp if item[3] == page_id), None)
+            # if not matched_info:
+            #     print(f"Page ID {page_id} not found in pages list")
+            #     continue
+
+            # CURRENCY = matched_info[1]
+            # BRAND = matched_info[2]
+            # PAGE_TYPE = matched_info[4]
+            # SPREAD_SHEET = matched_info[5]
+            # Get the page info from the map
+            matched_info = pages_info_map.get(page_id)
             if not matched_info:
                 print(f"Page ID {page_id} not found in pages list")
                 continue
 
-            CURRENCY = matched_info[1]
-            BRAND = matched_info[2]
-            PAGE_TYPE = matched_info[4]
-            SPREAD_SHEET = matched_info[5]
+            CURRENCY = matched_info["currency"]
+            BRAND = matched_info["brand"]
+            PAGE_TYPE = matched_info["page_type"]
+            FOLLOWERS = matched_info["followers"]
+            SPREAD_SHEET = matched_info["spreadsheet"]
 
             # Extract spreadsheet ID
             match = re.search(r"/d/([a-zA-Z0-9-_]+)", SPREAD_SHEET)
@@ -179,57 +219,29 @@ def main():
 
             try:
                 # Step 1: Ensure headers exist (handles inserting post_id headers)
-                spreadsheet.transfer_insight_header_only(spreadsheet_id, CURRENCY, insights)
-                print(f"✅ Header transfer completed for {BRAND} (page {page_id})")
+                # spreadsheet.transfer_insight_header_only(spreadsheet_id, CURRENCY, insights)
+                # print(f"✅ Header transfer completed for {BRAND} (page {page_id})")
 
                 # Step 2: Transfer ALL insights in one call (unified row 4 update)
-                spreadsheet.transfer_insight_data(spreadsheet_id, CURRENCY, insights)
-                print(f"✅ Insight data transfer completed for {BRAND} (page {page_id})")
+                spreadsheet.transfer_insight_data(spreadsheet_id, CURRENCY, insights, FOLLOWERS)
+                print(f"✅ Insight data transfer completed for {BRAND} (page {page_id}) Folowers: {FOLLOWERS}")
 
             except Exception as e:
                 print(f"❌ Failed processing {BRAND} (page {page_id}): {str(e)}")
-        # for insight in all_insights:
-        #     # Match page_id to index 3
-        #     matched_info_id = next((item for item in pages_sp if item[3] == insight['source_page_id']), None)
-
-        #     if matched_info_id:
-        #         CURRENCY = matched_info_id[1]
-        #         BRAND = matched_info_id[2]
-        #         PAGE_TYPE = matched_info_id[4]
-        #         SPREAD_SHEET = matched_info_id[5]
-        #         print(CURRENCY, BRAND, PAGE_TYPE, SPREAD_SHEET)
-        #         # Extract spreadsheet ID using regex
-        #         match = re.search(r"/d/([a-zA-Z0-9-_]+)", SPREAD_SHEET)
-        #         spreadsheet_id = match.group(1) if match else None
-        #         # header = spreadsheet.generate_header(all_insights_test)
-        #         spreadsheet.transfer_insight_header_only(spreadsheet_id, CURRENCY, all_insights)
-        #         spreadsheet.transfer_insight_data(spreadsheet_id, CURRENCY, all_insights)
-        #     else:
-        #         print(f"Page ID: {page_id} not found in page_info_list.")
 
         # # Define the folder and create it if it doesn't exist
-        # output_folder = "insight_results"
-        # os.makedirs(output_folder, exist_ok=True)
+        output_folder = "insight_results"
+        os.makedirs(output_folder, exist_ok=True)
 
-        # # Use the current timestamp or date to make the filename unique
-        # filename = f"insights_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
-        # file_path = os.path.join(output_folder, filename)
-        # # Save the data as JSON
-        # with open(file_path, 'w', encoding='utf-8') as f:
-        #     json.dump(all_insights, f, ensure_ascii=False, indent=4)
+        # Use the current timestamp or date to make the filename unique
+        filename = f"insights_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        file_path = os.path.join(output_folder, filename)
+        # Save the data as JSON
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(all_insights, f, ensure_ascii=False, indent=4)
 
-            
 
-    print("Facebook accounts fetched from spreadsheet:")
-    
-
-    # print(accounts)
-
-    # Process each account
-    # helper = FacebookHelper(accounts, pages)
-    # helper_info = helper.get_restructured_info()
-    # print("Restructured Facebook accounts and pages info:")
-    # print(helper_info)
+    print("Facebook Automation completed:")
 
 
 # Run the main function
