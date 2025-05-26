@@ -2,6 +2,7 @@ import requests
 import os
 import time
 import re
+import random
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -102,7 +103,7 @@ class SpreadsheetController:
                 service, spreadsheet_id, sheet_id, tab_name,
                 today_str, currency_row_index, insights,total_followers, value_in_column_e
             )
-
+            
             return values
 
         except HttpError as err:
@@ -232,7 +233,110 @@ class SpreadsheetController:
         print(f"No value found in column E for the currency '{currency}'.")
         return None
 
+    def safe_execute_update(self, func, retries=5, delay=2, backoff=2):
+        for attempt in range(retries):
+            try:
+                return func()  # get the request object
+                # return request.execute()  # execute here
+            except HttpError as e:
+                if e.resp.status == 429 and attempt < retries - 1:
+                    wait_time = delay * (backoff ** attempt)
+                    print(f"[429] Rate limit hit. Retrying in {wait_time:.2f} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    raise
+
+
     def _update_sheet_values(self, service, spreadsheet_id, sheet_id, tab_name, 
+                            today_str, currency_row_index, insights, total_followers, value_in_column_e):
+        print("Updating sheet values...")
+        sheet = service.spreadsheets()
+
+        # Values
+        difference = max(0, total_followers - value_in_column_e)
+        values_only = [
+            insights.get('page_post_engagements_day', 0),
+            insights.get('page_post_engagements_monthly', 0),
+            insights.get('yearly_page_post_engagements', 0),
+            insights.get('page_impressions_day', 0),
+            insights.get('page_impressions_monthly', 0),
+            insights.get('yearly_page_impressions', 0),
+            insights.get('page_impressions_unique_day', 0),
+            insights.get('page_impressions_unique_monthly', 0),
+            insights.get('yearly_page_impressions_unique', 0),
+            insights.get('page_views_total_day', 0),
+            insights.get('page_views_total_monthly', 0),
+            insights.get('yearly_page_views_total', 0),
+            insights.get('total_likes_today', 0),
+            insights.get('new_likes_today', 0),
+        ]
+
+        all_values = [[today_str], [total_followers], [difference]] + [[v] for v in values_only]
+
+        # Batch update all values from D{currency_row_index-1} to D{currency_row_index+15}
+        data = [
+            {
+                "range": f"{tab_name}!D{currency_row_index-1}:D{currency_row_index+15}",
+                "values": all_values
+            }
+        ]
+        self.safe_execute_update(lambda: sheet.values().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"valueInputOption": "RAW", "data": data}
+        ).execute())
+
+        # Format date cell
+        requests = [
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": currency_row_index - 2,
+                        "endRowIndex": currency_row_index - 1,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 4
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "horizontalAlignment": "CENTER",
+                            "textFormat": {
+                                "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat(horizontalAlignment,textFormat.foregroundColor)"
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": currency_row_index - 1,
+                        "endRowIndex": currency_row_index + 16,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 4
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "NUMBER",
+                                "pattern": "#,##0"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            }
+        ]
+        self.safe_execute_update(lambda: service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute())
+
+
+        print(f"Updated values and formatted rows {currency_row_index-1} to {currency_row_index+15}")
+        
+    def _update_sheet_values_old(self, service, spreadsheet_id, sheet_id, tab_name, 
                             today_str, currency_row_index, insights, total_followers, value_in_column_e):
         """Update the sheet with today's date, total followers, and difference."""
         print("Updating sheet values...")
@@ -301,12 +405,21 @@ class SpreadsheetController:
         print(insights)
         values_only = [
             # insights['followers_count'],
-            insights.get('post_engagements', 0),
-            insights.get('total_impressions', 0),
-            insights.get('page_views',0),
+            insights.get('page_post_engagements_day', 0),
+            insights.get('page_post_engagements_monthly', 0),
+            insights.get('yearly_page_post_engagements', 0),
+            insights.get('page_impressions_day', 0),
+            insights.get('page_impressions_monthly', 0),
+            insights.get('yearly_page_impressions', 0),
+            insights.get('page_impressions_unique_day', 0),
+            insights.get('page_impressions_unique_monthly', 0),
+            insights.get('yearly_page_impressions_unique', 0),
+            insights.get('page_views_total_day',0),
+            insights.get('page_views_total_monthly',0),
+            insights.get('yearly_page_views_total',0),
             insights.get('total_likes_today',0),
             insights.get('new_likes_today',0),
-            insights.get('total_reach',0),
+            # insights.get('total_reach',0),
         ]
         start_row = currency_row_index + 2       # e.g., row 7
         for i, value in enumerate(values_only):
@@ -929,6 +1042,60 @@ class SpreadsheetController:
             print(f"🔴 Critical Failure: {str(e)}")
             return False
 
+    def hide_old_rows(self, spreadsheet_id: str, tab_name: str):
+        service = self._initialize_google_sheets_service()
+        sheet = service.spreadsheets()
+        
+        # Get all dates in Column Q (index 16, so range Q3 down)
+        result = sheet.values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f"{tab_name}!Q3:Q",
+            majorDimension="COLUMNS"
+        ).execute()
+
+        values = result.get("values", [[]])[0]
+        old_yesterday = (datetime.now().date() - timedelta(days=2))
+
+        rows_to_hide = []
+        for i, val in enumerate(values):
+            try:
+                row_date = datetime.strptime(val.strip(), "%Y-%m-%d").date()
+                if row_date <= old_yesterday:
+                    rows_to_hide.append(i + 2)  # index starts at 0, row 3 = index 0 + 2
+            except Exception:
+                continue
+
+        if not rows_to_hide:
+            print("ℹ️ No rows to hide.")
+            return
+
+        # Get the sheet ID
+        sheet_metadata = sheet.get(spreadsheetId=spreadsheet_id).execute()
+        sheet_id = next(
+            s["properties"]["sheetId"]
+            for s in sheet_metadata["sheets"]
+            if s["properties"]["title"] == tab_name
+        )
+
+        requests = [{
+            "updateDimensionProperties": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "dimension": "ROWS",
+                    "startIndex": row,
+                    "endIndex": row + 1,
+                },
+                "properties": {"hiddenByUser": True},
+                "fields": "hiddenByUser",
+            }
+        } for row in rows_to_hide]
+
+        body = {"requests": requests}
+        sheet.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+
+        print(f"✅ Hidden {len(rows_to_hide)} rows with date <= yesterday.")
+
+    
     def transfer_insight_data_old(self, spreadsheet_id: str, tab_name: str, insights_data: list, followers, date: str = None):
         try:
             print(f"\n=== Transfer to {tab_name} for date: {date or 'today'}, Followers: {followers} ===")

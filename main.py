@@ -46,8 +46,8 @@ def main():
 
     #ON DEPLOYED
     today = datetime.now(timezone.utc).date()
-    # yesterday = today - timedelta(days=1)
-    today_str = today.strftime('%Y-%m-%d') #Yesterday date
+    yesterday = today - timedelta(days=1)
+    today_str = yesterday.strftime('%Y-%m-%d') #Yesterday date
     
     # read the spreadsheet data
     spreadsheet = SpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
@@ -226,6 +226,8 @@ def main():
                 spreadsheet.transfer_insight_data(spreadsheet_id, CURRENCY, insights, FOLLOWERS)
                 print(f"✅ Insight data transfer completed for {BRAND} (page {page_id}) Folowers: {FOLLOWERS}")
 
+                spreadsheet.hide_old_rows(spreadsheet_id, CURRENCY)
+                print(f"✅ OLD ROWS HIDDEN {BRAND} (page {page_id}) Folowers: {FOLLOWERS}")
             except Exception as e:
                 print(f"❌ Failed processing {BRAND} (page {page_id}): {str(e)}")
 

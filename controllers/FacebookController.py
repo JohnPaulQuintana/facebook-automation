@@ -245,7 +245,57 @@ class FacebookController:
         
         return all_insights
 
-    def get_facebook_page_metrics(self, page_id, page_access_token, date="2025-05-11"):
+    def get_yearly_metrics(self, page_id, page_access_token):
+        today = datetime.now(timezone.utc).date() - timedelta(days=1)  # yesterday's date in UTC
+        start_of_year = today.replace(month=1, day=1)
+        current_start = start_of_year
+
+        yearly_totals = {
+            'page_views_total': 0,
+            'page_post_engagements': 0,
+            'page_impressions': 0,
+            'page_impressions_unique': 0,
+        }
+
+        # Because Graph API limits date range for insights, fetch monthly chunks
+        while current_start <= today:
+            # Calculate end of current month chunk
+            next_month = (current_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+            current_end = min(next_month - timedelta(days=1), today)
+
+            # Print the date range being requested
+            print(f"Requesting data from {current_start} to {current_end}")
+
+            insights_params = {
+                'access_token': page_access_token,
+                'metric': 'page_post_engagements,page_impressions,page_impressions_unique,page_views_total',
+                'since': current_start.strftime('%Y-%m-%d'),
+                'until': current_end.strftime('%Y-%m-%d'),
+                'period': 'day'  # get daily breakdown to sum
+            }
+            
+            url = f"{self.base_url}{page_id}/insights"
+            response = requests.get(url, params=insights_params)
+            if response.status_code != 200:
+                print(f"Error fetching insights: {response.status_code} - {response.text}")
+                return None
+
+            data = response.json().get('data', [])
+            
+            # Sum the daily values for each metric
+            for entry in data:
+                name = entry['name']
+                values = entry.get('values', [])
+                total = sum(item.get('value', 0) for item in values)
+
+                if name in yearly_totals:
+                    yearly_totals[name] += total
+
+            current_start = current_end + timedelta(days=1)
+
+        return yearly_totals
+
+    def get_facebook_page_metrics(self, page_id, page_access_token, date):
         """
         Fetches Facebook Page metrics including:
         - Followers count (lifetime total)
@@ -271,7 +321,7 @@ class FacebookController:
                 'access_token': page_access_token,
                 'metric': 'page_post_engagements,page_impressions,'
                         'page_impressions_unique,page_views_total,page_fan_adds, page_fans',
-                'period': 'day',
+                # 'period': 'day',
                 'since': date,
                 'until': date
             }
@@ -285,21 +335,66 @@ class FacebookController:
             # Parse insights
             metrics = {}
             for entry in insights_data:
-                if entry['period'] == 'day':
-                    metrics[entry['name']] = entry['values'][0]['value']
+                name = entry['name']
+                period = entry['period']
+                value = entry['values'][0]['value'] if entry['values'] else 0
+
+                # if entry['period'] == 'day':
+                #     metrics[entry['name']] = entry['values'][0]['value']
+                # Store based on metric name and period
+                if name == 'page_impressions':
+                    if period == 'day':
+                        metrics['page_impressions_day'] = value
+                    elif period == 'days_28':
+                        metrics['page_impressions_month'] = value
+                elif name == 'page_impressions_unique':
+                    if period == 'day':
+                        metrics['page_impressions_unique_day'] = value
+                    elif period == 'days_28':
+                        metrics['page_impressions_unique_month'] = value
+                elif name == 'page_post_engagements':
+                    if period == 'day':
+                        metrics['page_post_engagements_day'] = value
+                    elif period == 'days_28':
+                        metrics['page_post_engagements_month'] = value
+                elif name == 'page_views_total':
+                    if period == 'day':
+                        metrics['page_views_total_day'] = value
+                    elif period == 'days_28':
+                        metrics['page_views_total_month'] = value
+                else:
+                    if period == 'day':
+                        metrics[name] = value
+
+            # Step 3: Call your yearly aggregation function here
+            yearly_totals = self.get_yearly_metrics(page_id, page_access_token)
+            print("PROCESSING YEARLY METRICS")
+            print(yearly_totals)
 
             # Combine both responses
-            print
             return {
                 'date': date,
                 'id': followers_data.get('id', 0),
                 'followers_count': followers_data.get('followers_count', 0),
-                'post_engagements': metrics.get('page_post_engagements', 0),
-                'total_impressions': metrics.get('page_impressions', 0),
-                'total_reach': metrics.get('page_impressions_unique', 0),
-                'page_views': metrics.get('page_views_total', 0),
+                # 'post_engagements': metrics.get('page_post_engagements', 0),
+                # 'total_impressions': metrics.get('page_impressions', 0),
+                # 'total_reach': metrics.get('page_impressions_unique', 0),
+                'page_views_total_day': metrics.get('page_views_total_day', 0),
+                'page_views_total_monthly': metrics.get('page_views_total_month', 0),
+                'page_post_engagements_day': metrics.get('page_post_engagements_day', 0),
+                'page_post_engagements_monthly': metrics.get('page_post_engagements_month', 0),
+                'page_impressions_day': metrics.get('page_impressions_day', 0),
+                'page_impressions_monthly': metrics.get('page_impressions_month', 0),
+                'page_impressions_unique_day': metrics.get('page_impressions_unique_day', 0),
+                'page_impressions_unique_monthly': metrics.get('page_impressions_unique_month', 0),
+                # 'page_views': metrics.get('page_views_total', 0),
                 'total_likes_today': metrics.get('page_fans', 0),
-                'new_likes_today': metrics.get('page_fan_adds', 0)
+                'new_likes_today': metrics.get('page_fan_adds', 0),
+                # Add yearly totals here:
+                'yearly_page_views_total': yearly_totals.get('page_views_total', 0) if yearly_totals else 0,
+                'yearly_page_post_engagements': yearly_totals.get('page_post_engagements', 0) if yearly_totals else 0,
+                'yearly_page_impressions': yearly_totals.get('page_impressions', 0) if yearly_totals else 0,
+                'yearly_page_impressions_unique': yearly_totals.get('page_impressions_unique', 0) if yearly_totals else 0,
             }
 
         except requests.exceptions.RequestException as e:

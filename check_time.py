@@ -21,8 +21,13 @@ from datetime import datetime, timedelta, timezone
 today = datetime.now()
 today_date = today.strftime('%Y-%m-%d')
 
+today2 = datetime.now(timezone.utc).date()
+yesterday = today2 - timedelta(days=1)
+today_str = yesterday.strftime('%Y-%m-%d') #Yesterday date
+
 # Set the start date to 30 days before today
 start_date = (today - timedelta(days=29)).strftime('%Y-%m-%d')  # 29 to include today as the 30th day
 
 print(f"Start Date: {start_date}")
 print(f"End Date: {today_date}")
+print(f"End Date: {today_str}")
