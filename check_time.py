@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-
+from datetime import date as dt
 # # Use UTC instead of local time
 # query_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
@@ -31,3 +31,11 @@ start_date = (today - timedelta(days=29)).strftime('%Y-%m-%d')  # 29 to include 
 print(f"Start Date: {start_date}")
 print(f"End Date: {today_date}")
 print(f"End Date: {today_str}")
+
+
+# Step 2: Get daily insights for current month
+todaym = dt.today()
+since = todaym.replace(day=1).isoformat()  # '2025-06-01'
+until = todaym.isoformat()
+
+print(since,until, dt.today().date())

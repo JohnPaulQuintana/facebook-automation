@@ -17,7 +17,7 @@ load_dotenv()
 class SpreadsheetController:
     def __init__(self, spreadsheet, range=None):
         self.spreadsheet = spreadsheet
-        self.range = range if range else "ACCOUNTS!A2:E"
+        self.range = range if range else "ACCOUNTS!A3:H"
 
     def get_facebook_accounts(self):
         print("Fetching accounts from spreadsheet...")
@@ -48,7 +48,7 @@ class SpreadsheetController:
         try:
             service = build('sheets', 'v4', credentials=creds)
             sheet = service.spreadsheets()
-            result = sheet.values().get(spreadsheetId=self.spreadsheet, range="PAGES!A2:F").execute()
+            result = sheet.values().get(spreadsheetId=self.spreadsheet, range="PAGES!A2:G").execute()
             values = result.get('values', [])
             if not values:
                 print("No data found.")
@@ -75,8 +75,8 @@ class SpreadsheetController:
 
             #ON DEPLOYED
             today = datetime.now(timezone.utc).date()
-            # yesterday = today - timedelta(days=1)
-            today_str = today.strftime('%d/%m/%Y') #Yesterday date
+            yesterday = today - timedelta(days=1)
+            today_str = yesterday.strftime('%d/%m/%Y') #Yesterday date
 
             # Check or create date column
             date_col_index = self._handle_date_column(
@@ -219,7 +219,7 @@ class SpreadsheetController:
         """Find the row index for the specified currency."""
         print(f"Finding row for currency '{currency}'...")
         for i, row in enumerate(values):
-            currency_with_type = currency + "-" + page_type if page_type == "GROUP" else currency
+            currency_with_type = currency + "-" + page_type if page_type == "NEW" else currency
             if row and row[0] == currency_with_type:
                 return i + 1  # sheet rows are 1-indexed
         print(f"Currency '{currency}' not found.")
@@ -246,14 +246,16 @@ class SpreadsheetController:
                 else:
                     raise
 
-
     def _update_sheet_values(self, service, spreadsheet_id, sheet_id, tab_name, 
                             today_str, currency_row_index, insights, total_followers, value_in_column_e):
         print("Updating sheet values...")
         sheet = service.spreadsheets()
 
         # Values
-        difference = max(0, total_followers - value_in_column_e)
+        #default is 0 if negative
+        # difference = max(0, total_followers - value_in_column_e)
+        difference = total_followers - value_in_column_e
+
         values_only = [
             insights.get('page_post_engagements_day', 0),
             insights.get('page_post_engagements_monthly', 0),

@@ -3,6 +3,7 @@ import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from datetime import date as dt
 from collections import defaultdict
 # Calculate date range (Jan 1st to today)
 # Use UTC instead of local time
@@ -16,10 +17,11 @@ class FacebookController:
         self.base_url = FACEBOOK_BASE_API_URL
         print("FacebookController initialized...")
     
-    def get_facebook_pages(self):
+    def get_facebook_pages_with_instagram(self):
         try:
-            print("Fetching pages from Facebook...")
+            print("Fetching pages and link ig from Facebook...")
             params = {
+                'fields': 'id,name,access_token,instagram_business_account',
                 'access_token': self.account[4]
             }
             response = requests.get(self.base_url+self.account[5]+"/accounts", params=params)
@@ -77,7 +79,7 @@ class FacebookController:
         print("Page Tokens")
         print(page_tokens)
         all_posts = []
-        for page_id, page_token in page_tokens:
+        for page_id, page_token, ig_id in page_tokens:
             try:
                 posts = self._get_posts_for_page(page_id, page_token, since, until)
                 for post in posts:
@@ -317,13 +319,17 @@ class FacebookController:
             followers_data = followers_response.json()
 
             # Step 2: Get daily insights (your new metrics)
+            # Step 2: Get daily insights for current month
+            todaym = dt.today()
+            since = todaym.replace(day=1).isoformat()  # '2025-06-01'
+            until = todaym.isoformat()
             insights_params = {
                 'access_token': page_access_token,
                 'metric': 'page_post_engagements,page_impressions,'
                         'page_impressions_unique,page_views_total,page_fan_adds, page_fans',
-                # 'period': 'day',
-                'since': date,
-                'until': date
+                'period': 'day',
+                'since': since,
+                'until': until
             }
             insights_response = requests.get(
                 f"{self.base_url}{page_id}/insights",
@@ -334,37 +340,65 @@ class FacebookController:
 
             # Parse insights
             metrics = {}
+            # updates
+            first_of_month = todaym.replace(day=1)
             for entry in insights_data:
-                name = entry['name']
-                period = entry['period']
-                value = entry['values'][0]['value'] if entry['values'] else 0
+                metric_name = entry['name']
+                values = entry.get('values', [])
 
-                # if entry['period'] == 'day':
-                #     metrics[entry['name']] = entry['values'][0]['value']
-                # Store based on metric name and period
-                if name == 'page_impressions':
-                    if period == 'day':
-                        metrics['page_impressions_day'] = value
-                    elif period == 'days_28':
-                        metrics['page_impressions_month'] = value
-                elif name == 'page_impressions_unique':
-                    if period == 'day':
-                        metrics['page_impressions_unique_day'] = value
-                    elif period == 'days_28':
-                        metrics['page_impressions_unique_month'] = value
-                elif name == 'page_post_engagements':
-                    if period == 'day':
-                        metrics['page_post_engagements_day'] = value
-                    elif period == 'days_28':
-                        metrics['page_post_engagements_month'] = value
-                elif name == 'page_views_total':
-                    if period == 'day':
-                        metrics['page_views_total_day'] = value
-                    elif period == 'days_28':
-                        metrics['page_views_total_month'] = value
-                else:
-                    if period == 'day':
-                        metrics[name] = value
+                monthly_sum = 0
+                today_value = 0
+
+                for val_entry in values:
+                    date_str = val_entry.get('end_time', '')[:10]
+                    try:
+                        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        continue  # skip if the date is invalid
+
+                    if first_of_month <= date_obj <= todaym:
+                        val = val_entry.get('value', 0)
+                        if isinstance(val, int):  # ensure value is numeric
+                            monthly_sum += val
+                            if date_obj == todaym:
+                                today_value = val
+
+                # Save results
+                metrics[f'{metric_name}_day'] = today_value
+                if 'Lifetime' not in metric_name:
+                    metrics[f'{metric_name}_month'] = monthly_sum
+
+            # for entry in insights_data:
+            #     name = entry['name']
+            #     period = entry['period']
+            #     value = entry['values'][0]['value'] if entry['values'] else 0
+
+            #     # if entry['period'] == 'day':
+            #     #     metrics[entry['name']] = entry['values'][0]['value']
+            #     # Store based on metric name and period
+            #     if name == 'page_impressions':
+            #         if period == 'day':
+            #             metrics['page_impressions_day'] = value
+            #         elif period == 'days_28':
+            #             metrics['page_impressions_month'] = value
+            #     elif name == 'page_impressions_unique':
+            #         if period == 'day':
+            #             metrics['page_impressions_unique_day'] = value
+            #         elif period == 'days_28':
+            #             metrics['page_impressions_unique_month'] = value
+            #     elif name == 'page_post_engagements':
+            #         if period == 'day':
+            #             metrics['page_post_engagements_day'] = value
+            #         elif period == 'days_28':
+            #             metrics['page_post_engagements_month'] = value
+            #     elif name == 'page_views_total':
+            #         if period == 'day':
+            #             metrics['page_views_total_day'] = value
+            #         elif period == 'days_28':
+            #             metrics['page_views_total_month'] = value
+            #     else:
+            #         if period == 'day':
+            #             metrics[name] = value
 
             # Step 3: Call your yearly aggregation function here
             yearly_totals = self.get_yearly_metrics(page_id, page_access_token)

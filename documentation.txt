@@ -120,3 +120,20 @@ Error Handling
 | Sheets   | API limit      | Delay and retry up to 3 times |
 
 ------------------------------------------------------------------------------------------------------------------
+
+
+TOKEN SAMPLE RESPONSE FOR VALIDATION:
+Processing account: FB3 with name: Indazita Nang
+Token info: {
+    'is_valid': True, 'expires_at': datetime.datetime(1970, 1, 1, 8, 0), 
+    'scopes': ['read_insights', 'pages_show_list', 'ads_management', 'ads_read',
+        'business_management', 'pages_read_engagement', 'pages_read_user_content',
+        'public_profile'],
+        'type': 'USER', 'profile_id': None, 'application': 'Automation',
+        'remaining_days': -20236
+    }
+
+    
+
+#NOTE:
+You can pass a class initialization to another class and access the methods inside of that

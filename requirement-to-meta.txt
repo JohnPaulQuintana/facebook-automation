@@ -8,6 +8,9 @@ ads_read - Applies to all objects
 business_management	- Applies to all objects
 pages_read_engagement - Applies to all objects
 pages_read_user_content - for post insights
+#for IG
+instagram_basic
+instagram_manage_insights
 
 for page followers:
 1. me?fields=followers_count - total folowers count
@@ -32,3 +35,17 @@ DATE FORMATE:
 today = datetime.now(timezone.utc).date()
 # yesterday = today - timedelta(days=1)
 today_str = today.strftime('%d/%m/%Y') #Yesterday date
+
+
+#IG POST LEVEL insights
+to get all the post 17841473282334086/media?fields=id,caption,media_url,timestamp&since=2025-05-03&until=2025-06-02
+
+available insight for post:
+{
+  "error": {
+    "message": "impressions, reach, replies, saved, video_views, likes, comments, shares, plays, total_interactions, follows, profile_visits, profile_activity, navigation, ig_reels_video_view_total_time, ig_reels_avg_watch_time, clips_replays_count, ig_reels_aggregated_all_plays_count, views",
+    "type": "OAuthException",
+    "code": 100,
+    "fbtrace_id": "AIF0SKJa-00BpEhTuSni02m"
+  }
+}
