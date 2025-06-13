@@ -17,7 +17,7 @@ load_dotenv()
 class SpreadsheetController:
     def __init__(self, spreadsheet, range=None):
         self.spreadsheet = spreadsheet
-        self.range = range if range else "ACCOUNTS!A3:H"
+        self.range = range if range else "ACCOUNTS!A3:I"
 
     def get_facebook_accounts(self):
         print("Fetching accounts from spreadsheet...")
@@ -48,7 +48,7 @@ class SpreadsheetController:
         try:
             service = build('sheets', 'v4', credentials=creds)
             sheet = service.spreadsheets()
-            result = sheet.values().get(spreadsheetId=self.spreadsheet, range="PAGES!A2:G").execute()
+            result = sheet.values().get(spreadsheetId=self.spreadsheet, range="PAGES!A2:H").execute()
             values = result.get('values', [])
             if not values:
                 print("No data found.")

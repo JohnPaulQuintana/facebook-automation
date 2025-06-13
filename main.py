@@ -9,17 +9,23 @@ from dotenv import load_dotenv
 # imported class
 from controllers.SpreadSheetController import SpreadsheetController
 from controllers.IGSpreadSheetController import IGSpreadsheetController
+from controllers.YoutubeSheetController import YoutubeSpreadsheetController
 from controllers.FacebookController import FacebookController
 from controllers.IGController import IGController
+from controllers.YoutubeController import YoutubeController
 from helpers.IG_Helper import IGHELPER
 from helpers.Facebook_Helper import FacebookHelper
+from helpers.Youtube_Helper import YoutubeHelper
 # Load environment variables
 load_dotenv()
 
 ACCOUNT_SHEET_ID = os.getenv("ACCOUNT_SHEET_ID")
 FB_GAINED_SHEET_ID = os.getenv("FB_GAINED_SHEET_ID")
 IG_GAINED_SHEET_ID = os.getenv("IG_GAINED_SHEET_ID")
+YT_GAINED_SHEET_ID = os.getenv("YT_GAINED_SHEET_ID")
+
 FACEBOOK_BASE_API_URL = os.getenv("FACEBOOK_BASE_API_URL")
+YOUTUBE_BASE_API_URL = os.getenv("YOUTUBE_BASE_API_URL")
 SPREADSHEET_RANGE = os.getenv("SPREADSHEET_RANGE")
 RAJI_ACCOUNT = os.getenv("RAJI_ACCOUNT")
 debug_dir = "debug_batches"
@@ -56,6 +62,7 @@ def main():
     # read the spreadsheet data
     spreadsheet = SpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
     ig_spreadsheet = IGSpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
+    yt_spreadsheet = YoutubeSpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
     accounts = spreadsheet.get_facebook_accounts()
     pages_sp = spreadsheet.get_facebook_pages()
     # print(pages_sp)
@@ -72,6 +79,8 @@ def main():
 
         facebookController = FacebookController(FACEBOOK_BASE_API_URL ,account)
         ig_Controller = IGController(FACEBOOK_BASE_API_URL)
+        youtube_Controller = YoutubeController(YOUTUBE_BASE_API_URL)
+
         pages = facebookController.get_facebook_pages_with_instagram()
         # print(pages)
         pages_info = []  # Array of page info objects
@@ -185,6 +194,28 @@ def main():
         facebook_helper.process_facebook_insights_by_page_id(sorted_data, pages_info, spreadsheet)
         # print(sorted_data)
 
+        #YOUTUBE
+        if account[0].startswith("YT"):
+            chanel_insights = youtube_Controller.get_youtube_page_metrics(account[3], account[4], account[8])
+            print(chanel_insights)
+            #mathe the code for youtube channel
+            matched_info = next((item for item in pages_sp if item[0] == account[0]), None)
+            #send it to designated sheet channel level
+            if matched_info:
+                print(f"Matched info for YouTube channel: {matched_info}")
+                yt_spreadsheet.get_youtube_spreadsheet_column(YT_GAINED_SHEET_ID,matched_info[2],matched_info[1],chanel_insights,chanel_insights.get("channel", {}).get("subscribers", 0), matched_info[4])
+
+                #process youtube posts insights
+                # yt_spreadsheet.transfer_video_insight_data()
+                youtube_helper = YoutubeHelper(chanel_insights.get("video_insights", []))
+                youtube_helper.process_youtube_insights_by_page_id(
+                    account[0], chanel_insights, matched_info, yt_spreadsheet
+                )
+            else:
+                print(f"No matched info found for YouTube channel: {account[0]}")
+                continue
+        else:
+            print(f"Skipping YouTube processing for account: {account[0]}")
 
         # #commented for now for ig development
         # # 3. Process insights for ALL pages while maintaining associations
