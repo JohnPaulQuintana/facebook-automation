@@ -211,7 +211,7 @@ class YoutubeController:
 
         # Fetch channel info (basic stats)
         channel_info = self.get_channel_info(username,api_key)
-
+        time.sleep(1)  # To avoid hitting API rate limits
         # Fetch insights
         daily_insights = self.fetch_channel_insights(creds, "daily", yesterday, yesterday)
         monthly_insights = self.fetch_channel_insights(creds, "monthly", start_month, yesterday)

@@ -16,9 +16,9 @@ API_KEY = "AIzaSyDt9uzOkRGgWFFUSNgsuP-4yzc6JLmCnDw"  # Replace with your YouTube
 # API_KEY = "AIzaSyBSOTjfg7XQhNzcvt3ng2r96O6lhhQB7wA"  # Replace with your YouTube API key
 #@baji_pak
 
-CHANNEL_HANDLES = ["@JeetBuzz.Bangladesh"]  # Add more handles like ["@baji_pak", "@another_channel"]
+CHANNEL_HANDLES = ["@JeetBuzz.Pakistan"]  # Add more handles like ["@baji_pak", "@another_channel"]
 # Path to your saved token
-token_path = "tokens/token_jeetbuzz_bdt.pkl"
+token_path = "tokens/token_jeetbuzz_pkr.pkl"
 
 # Load credentials from saved token
 def load_credentials(token_path):
