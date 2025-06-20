@@ -15,3 +15,8 @@ SIX6S:
 BDT = six6s.bdt.sm@gmail.com - Suspended
 INR = six6s.inr.sm@gmail.com - Suspended
 PKR = six6s.pkr.sm@gmail.com - Suspended
+
+
+FOR TWITTER
+BAJI:
+BDT = 

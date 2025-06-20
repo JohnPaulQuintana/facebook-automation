@@ -48,7 +48,7 @@ class SpreadsheetController:
         try:
             service = build('sheets', 'v4', credentials=creds)
             sheet = service.spreadsheets()
-            result = sheet.values().get(spreadsheetId=self.spreadsheet, range="PAGES!A2:H").execute()
+            result = sheet.values().get(spreadsheetId=self.spreadsheet, range="PAGES!A2:K").execute()
             values = result.get('values', [])
             if not values:
                 print("No data found.")

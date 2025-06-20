@@ -10,12 +10,19 @@ from dotenv import load_dotenv
 from controllers.SpreadSheetController import SpreadsheetController
 from controllers.IGSpreadSheetController import IGSpreadsheetController
 from controllers.YoutubeSheetController import YoutubeSpreadsheetController
+from controllers.TwitterSheetController import TwitterSpreadsheetController
+from controllers.client.ClientSheetController import ClientSheetController
+
 from controllers.FacebookController import FacebookController
 from controllers.IGController import IGController
 from controllers.YoutubeController import YoutubeController
+from controllers.TwitterController import TwitterController
+
 from helpers.IG_Helper import IGHELPER
 from helpers.Facebook_Helper import FacebookHelper
 from helpers.Youtube_Helper import YoutubeHelper
+from helpers.Twitter_Helper import TwitterHelper
+from helpers.Client_Helper import ClientHelper
 # Load environment variables
 load_dotenv()
 
@@ -23,9 +30,13 @@ ACCOUNT_SHEET_ID = os.getenv("ACCOUNT_SHEET_ID")
 FB_GAINED_SHEET_ID = os.getenv("FB_GAINED_SHEET_ID")
 IG_GAINED_SHEET_ID = os.getenv("IG_GAINED_SHEET_ID")
 YT_GAINED_SHEET_ID = os.getenv("YT_GAINED_SHEET_ID")
+TW_GAINED_SHEET_ID = os.getenv("TW_GAINED_SHEET_ID")
+CLIENT_SHEET_ID = os.getenv("CLIENT_SHEET_ID")
 
 FACEBOOK_BASE_API_URL = os.getenv("FACEBOOK_BASE_API_URL")
 YOUTUBE_BASE_API_URL = os.getenv("YOUTUBE_BASE_API_URL")
+TWITTER_BASE_API_URL = os.getenv("TWITTER_BASE_API_URL")
+
 SPREADSHEET_RANGE = os.getenv("SPREADSHEET_RANGE")
 RAJI_ACCOUNT = os.getenv("RAJI_ACCOUNT")
 debug_dir = "debug_batches"
@@ -63,11 +74,59 @@ def main():
     spreadsheet = SpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
     ig_spreadsheet = IGSpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
     yt_spreadsheet = YoutubeSpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
+    tw_spreadsheet = TwitterSpreadsheetController(ACCOUNT_SHEET_ID, SPREADSHEET_RANGE)
+    # Initialize client
+    client_sheet = ClientSheetController()
+    
+    # # 1. Get your target rows (from your existing function)
+    # target_rows = client_sheet.batch_find_targets(
+    #     spreadsheet_id="1UsOJZzhQ71veg5oveCxoiIJCmyIdoQRXHrA7Qs276xE",
+    #     tab_configs={
+    #         "BAJI BDT": {
+    #             "targets": ["FACEBOOK PAGE", "FACEBOOK GROUP", "INSTAGRAM CASINO", "INSTAGRAM SPORTS", "TWITTER","YOUTUBE"],
+    #             "start_row": 8,
+    #             "column": "B"
+    #         }
+    #     }
+    # )["BAJI BDT"]
+    # print("Target rows:", target_rows)
+    
+    # # 2. Prepare your values (example data)
+    # platform_values = {
+    #     "FACEBOOK PAGE": ["1500", "1800", "2000"],
+    #     "INSTAGRAM CASINO": ["800", "1000", "1200"]
+    # }
+    
+    # # 3. Convert to object format
+    # platform_cells = client_sheet.convert_to_object_format(target_rows, platform_values)
+    # # Result: {'FACEBOOK PAGE': [{'row':9,'value':'1500'}, ...]}
+
+    # # 4. Execute update
+    # results = client_sheet.update_platform_cells(
+    #     spreadsheet_id="1UsOJZzhQ71veg5oveCxoiIJCmyIdoQRXHrA7Qs276xE",
+    #     tab_name="BAJI BDT",
+    #     platform_cells=platform_cells
+    # )
+
+    # # 5. Print results
+    # print("\nUpdate Results:")
+    # for platform, success in results.items():
+    #     print(f"{platform:20} {'✓' if success else '✗'}")
+    # # Get combined cell references
+    # # cell_references = client_sheet.get_target_cells_with_month(
+    # #     spreadsheet_id="1UsOJZzhQ71veg5oveCxoiIJCmyIdoQRXHrA7Qs276xE",
+    # #     tab_name="BAJI BDT",
+    # #     target_texts=["FACEBOOK PAGE", "YOUTUBE"],
+    # #     start_row=8,
+    # #     search_column="B"
+    # # )
+    # # print("Cell references:", cell_references)
+
+
     accounts = spreadsheet.get_facebook_accounts()
     pages_sp = spreadsheet.get_facebook_pages()
-    # print(pages_sp)
+    
     for account in accounts:
-        
         
         # Verify if the account is active and token is valid
         # print(f"Processing account: {account[0]} with name: {account[3]}")
@@ -80,119 +139,143 @@ def main():
         facebookController = FacebookController(FACEBOOK_BASE_API_URL ,account)
         ig_Controller = IGController(FACEBOOK_BASE_API_URL)
         youtube_Controller = YoutubeController(YOUTUBE_BASE_API_URL)
-
-        pages = facebookController.get_facebook_pages_with_instagram()
-        # print(pages)
-        pages_info = []  # Array of page info objects
-
-        # get only badsha pages for this account ragi:
-        if account[5] == RAJI_ACCOUNT:
-            print(f"Processing account: {account[0]} with name: {account[3]} (RAJI ACCOUNT)")
-            pages['data'] = [page for page in pages.get('data', []) if page.get('name') == 'Badsha']
-
-        for page in pages.get('data', []):
-            page_id = page.get('id', 0)
-            page_access_token = page.get('access_token', 'xxxxxxxxxxxxx')
-            ig = page.get('instagram_business_account', False)
-            ig_id = ig.get('id', False) if ig else False
-            # print(f"Page ID: {page_id}, Access Token: {page_access_token}, Instagram Business Account ID: {ig_id}")
-            
-            # Match page_id to index 3
-            matched_info = next((item for item in pages_sp if item[3] == page_id), None)
-
-            if matched_info:
-                currency = matched_info[1]
-                brand = matched_info[2]
-                PAGE_TYPE = matched_info[4]
-                SPREAD_SHEET = matched_info[5]#facebook sheet
-                IG_SHEET = matched_info[6]
-
-                # Extract spreadsheet ID
-                followers = facebookController.get_facebook_page_metrics(page_id, page_access_token, today_str)
-                print(f"Page ID: {page_id}, Followers: {followers}, Currency: {currency}, Brand: {brand}, Page Type: {PAGE_TYPE}")
-                
-                ig_page_insights = ig_Controller.get_ig_page_metrics(page_id,ig_id,page_access_token)
-                if ig_page_insights:
-                    print("------------------------------------------------------------------------------")
-                    print(ig_page_insights)
-                    print("------------------------------------------------------------------------------")
-
-                    #processing ig page insights
-                    ig_spreadsheet.get_ig_spreadsheet_column(IG_GAINED_SHEET_ID,brand,currency,ig_page_insights,ig_page_insights[0].get('followers_count', 0), PAGE_TYPE)        
-                
-                 # get the target column and brand name
-                target_column = spreadsheet.get_spreadsheet_column(FB_GAINED_SHEET_ID,brand,currency,followers,followers['followers_count'], PAGE_TYPE)
-                # print(target_column)
-                # Build the page info object
-                page_info = {
-                    "page_id": page_id,
-                    "instagram_id": ig_id,
-                    "access_token": page_access_token,
-                    "currency": currency,
-                    "brand": brand,
-                    "page_type": PAGE_TYPE,
-                    "followers": followers,
-                    "ig_followers": ig_page_insights[0].get('followers_count', 0) if ig_page_insights else 0,
-                    "target_column": target_column,
-                    "spreadsheet": SPREAD_SHEET,
-                    "ig_spreadsheet": IG_SHEET
-                }
-
-                pages_info.append(page_info)
-
-            else:
-                print(f"Page ID: {page_id} not found in page_info_list.")
-
-            # transfer it to designated spreadsheet
-
-     
-        # 1. Get all pages and their tokens
-        # page_tokens = [(page['id'], page['access_token']) for page in pages.get('data', [])]
-        page_tokens = [
-            (
-                page['id'],
-                page.get('access_token'),
-                page.get('instagram_business_account', {}).get('id')  # This could be None
-            )
-            for page in pages.get('data', [])
-        ]
-
-        # 2. Fetch all posts (now with page tracking)
-        # # Get the current year and today’s date
-        # current_year = datetime.now().year
-        # today_date = datetime.now().strftime('%Y-%m-%d')
-        # # Set the starting date to January 1st of the current year
-        # start_date = f"{current_year}-01-01"
-        #new updates
-        # Get today’s date
-        today = datetime.now()
-        today_date = today.strftime('%Y-%m-%d')
-
-        # Set the start date to 30 days before today
-        start_date = (today - timedelta(days=31)).strftime('%Y-%m-%d')  # 29 to include today as the 30th day
+        twitter_Controller = TwitterController(TWITTER_BASE_API_URL, account[4])
         
+        client_helper = ClientHelper()
 
-        # INSTAGRAM
-        ig_posts_data = ig_Controller.fetch_all_ig_posts(page_tokens, start_date)
-        print("This is IG POST...")
-        all_ig_insights = ig_Controller.process_all_post_insights(ig_posts_data)
-        # Send to ig helper to process insights
-        ig_helper = IGHELPER(all_ig_insights)
-        print("This is IG HELPER...")
-        sorted_data = ig_helper.get_sorted_posts(True)
-        ig_helper.process_ig_insights_by_ig_id(sorted_data, pages_info, ig_spreadsheet)
+        if account[0].startswith("FB"):
+            pages = facebookController.get_facebook_pages_with_instagram()
+            # print(pages)
+            pages_info = []  # Array of page info objects
+
+            # get only badsha pages for this account ragi:
+            if account[5] == RAJI_ACCOUNT:
+                print(f"Processing account: {account[0]} with name: {account[3]} (RAJI ACCOUNT)")
+                pages['data'] = [page for page in pages.get('data', []) if page.get('name') == 'Badsha']
+
+            for page in pages.get('data', []):
+                page_id = page.get('id', 0)
+                page_access_token = page.get('access_token', 'xxxxxxxxxxxxx')
+                ig = page.get('instagram_business_account', False)
+                ig_id = ig.get('id', False) if ig else False
+                # print(f"Page ID: {page_id}, Access Token: {page_access_token}, Instagram Business Account ID: {ig_id}")
+                
+                # Match page_id to index 3
+                matched_info = next((item for item in pages_sp if item[3] == page_id), None)
+
+                if matched_info:
+                    currency = matched_info[1]
+                    brand = matched_info[2]
+                    PAGE_TYPE = matched_info[4]
+                    SPREAD_SHEET = matched_info[5]#facebook sheet
+                    IG_SHEET = matched_info[6]
+
+                    # Extract spreadsheet ID
+                    followers = facebookController.get_facebook_page_metrics(page_id, page_access_token, today_str)
+                    print(f"Page ID: {page_id}, Followers: {followers}, Currency: {currency}, Brand: {brand}, Page Type: {PAGE_TYPE}")
+                    
+                    ig_page_insights = ig_Controller.get_ig_page_metrics(page_id,ig_id,page_access_token)
+                    if ig_page_insights:
+                        print("------------------------------------------------------------------------------")
+                        print(ig_page_insights)
+                        print("------------------------------------------------------------------------------")
+
+                        #processing ig page insights
+                        ig_spreadsheet.get_ig_spreadsheet_column(IG_GAINED_SHEET_ID,brand,currency,ig_page_insights,ig_page_insights[0].get('followers_count', 0), PAGE_TYPE)        
+
+                        #update client sheet
+                        # Access monthly insights safely
+                        monthly = ig_page_insights[0].get('monthly_insights', {})
+                        monthly_impressions = monthly.get('impressions', 0)
+                        monthly_engagements = monthly.get('engagements', 0)
+                        # TARGET = "INSTAGRAM"
+                        # if brand == 'BAJI' and matched_info[10] == 'BDT':
+                        #     print("Target")
+                        client_helper._process_data(
+                                f"{matched_info[2]} {matched_info[10]}", CLIENT_SHEET_ID, "INSTAGRAM", client_sheet, 
+                                [ig_page_insights[0].get('followers_count', 0), monthly_impressions, monthly_engagements]
+                            )
+                    
+                    # get the target column and brand name
+                    target_column = spreadsheet.get_spreadsheet_column(FB_GAINED_SHEET_ID,brand,currency,followers,followers['followers_count'], PAGE_TYPE)
+                    
+                    #update client sheet
+                    client_helper._process_data(
+                            f"{matched_info[2]} {matched_info[10]}", CLIENT_SHEET_ID, matched_info[9], client_sheet, 
+                            [followers['followers_count'], followers['page_impressions_monthly'], followers['page_post_engagements_monthly']]
+                        )
+                    
+                    # print(target_column)
+                    # Build the page info object
+                    page_info = {
+                        "page_id": page_id,
+                        "instagram_id": ig_id,
+                        "access_token": page_access_token,
+                        "currency": currency,
+                        "brand": brand,
+                        "page_type": PAGE_TYPE,
+                        "followers": followers,
+                        "ig_followers": ig_page_insights[0].get('followers_count', 0) if ig_page_insights else 0,
+                        "target_column": target_column,
+                        "spreadsheet": SPREAD_SHEET,
+                        "ig_spreadsheet": IG_SHEET
+                    }
+
+                    pages_info.append(page_info)
+
+                else:
+                    print(f"Page ID: {page_id} not found in page_info_list.")
+
+                # transfer it to designated spreadsheet
+
+        
+            # 1. Get all pages and their tokens
+            # page_tokens = [(page['id'], page['access_token']) for page in pages.get('data', [])]
+            page_tokens = [
+                (
+                    page['id'],
+                    page.get('access_token'),
+                    page.get('instagram_business_account', {}).get('id')  # This could be None
+                )
+                for page in pages.get('data', [])
+            ]
+
+            # 2. Fetch all posts (now with page tracking)
+            # # Get the current year and today’s date
+            # current_year = datetime.now().year
+            # today_date = datetime.now().strftime('%Y-%m-%d')
+            # # Set the starting date to January 1st of the current year
+            # start_date = f"{current_year}-01-01"
+            #new updates
+            # Get today’s date
+            today = datetime.now()
+            today_date = today.strftime('%Y-%m-%d')
+
+            # Set the start date to 30 days before today
+            start_date = (today - timedelta(days=31)).strftime('%Y-%m-%d')  # 29 to include today as the 30th day
+            
+
+            # # INSTAGRAM
+            # ig_posts_data = ig_Controller.fetch_all_ig_posts(page_tokens, start_date)
+            # print("This is IG POST...")
+            # all_ig_insights = ig_Controller.process_all_post_insights(ig_posts_data)
+            # # Send to ig helper to process insights
+            # ig_helper = IGHELPER(all_ig_insights)
+            # print("This is IG HELPER...")
+            # sorted_data = ig_helper.get_sorted_posts(True)
+            # ig_helper.process_ig_insights_by_ig_id(sorted_data, pages_info, ig_spreadsheet)
 
 
 
-        # FACEBBOOK
-        posts_data = facebookController.fetch_all_posts_for_pages(page_tokens, start_date, today_date)
-        all_facebook_insights = facebookController.process_all_pages_insights(posts_data)
-        #Send to facebook helper to process insights
-        print("This is FACEBOOK HELPER...")
-        facebook_helper = FacebookHelper(all_facebook_insights)
-        sorted_data = facebook_helper.get_sorted_posts(True)
-        facebook_helper.process_facebook_insights_by_page_id(sorted_data, pages_info, spreadsheet)
-        # print(sorted_data)
+            # # FACEBBOOK
+            # posts_data = facebookController.fetch_all_posts_for_pages(page_tokens, start_date, today_date)
+            # all_facebook_insights = facebookController.process_all_pages_insights(posts_data)
+            # #Send to facebook helper to process insights
+            # print("This is FACEBOOK HELPER...")
+            # facebook_helper = FacebookHelper(all_facebook_insights)
+            # sorted_data = facebook_helper.get_sorted_posts(True)
+            # facebook_helper.process_facebook_insights_by_page_id(sorted_data, pages_info, spreadsheet)
+            # # print(sorted_data)
 
         #YOUTUBE
         if account[0].startswith("YT"):
@@ -204,19 +287,113 @@ def main():
             if matched_info:
                 print(f"Matched info for YouTube channel: {matched_info}")
                 yt_spreadsheet.get_youtube_spreadsheet_column(YT_GAINED_SHEET_ID,matched_info[2],matched_info[1],chanel_insights,chanel_insights.get("channel", {}).get("subscribers", 0), matched_info[4])
+                print(chanel_insights)
 
+                # Access safely using .get()
+                
+                monthly_insights = chanel_insights.get('monthly_insights', {})
+                monthly_views = monthly_insights.get('views', 0)
+                monthly_engagements = monthly_insights.get('engagements', 0)
+
+                client_helper._process_data(
+                            f"{matched_info[2]} {matched_info[10]}", CLIENT_SHEET_ID, matched_info[9], client_sheet, 
+                            [chanel_insights.get("channel", {}).get("subscribers", 0), monthly_views, monthly_engagements]
+                        )
+                
                 #process youtube posts insights
                 # yt_spreadsheet.transfer_video_insight_data()
-                youtube_helper = YoutubeHelper(chanel_insights.get("video_insights", []))
-                youtube_helper.process_youtube_insights_by_page_id(
-                    account[0], chanel_insights, matched_info, yt_spreadsheet
-                )
+                # youtube_helper = YoutubeHelper(chanel_insights.get("video_insights", []))
+                # youtube_helper.process_youtube_insights_by_page_id(
+                #     account[0], chanel_insights, matched_info, yt_spreadsheet
+                # )
             else:
                 print(f"No matched info found for YouTube channel: {account[0]}")
                 continue
         else:
             print(f"Skipping YouTube processing for account: {account[0]}")
 
+        #FOR TWITTER
+        if account[0].startswith("TW"):
+            chanel_insights = twitter_Controller.fetch_channel_insights(account[3])
+            print(chanel_insights)
+            if chanel_insights:
+                rest_id = chanel_insights['rest_id']
+                current_year_media = twitter_Controller.get_current_month_media(account[3],rest_id)
+                #mathe the code for youtube channel
+                matched_info = next((item for item in pages_sp if item[0] == account[0]), None)
+
+                if current_year_media:
+                    # Analyze metrics
+                    insights = twitter_Controller.analyze_current_year_metrics(current_year_media)
+                    # print(insights)
+                    #Analyze 30days periods
+                    # recent_media = filter_media_last_30_days(current_year_media)
+
+                    
+                    #send it to designated sheet channel level
+                    if matched_info and insights:
+                        print(f"Matched info for YouTube channel: {matched_info}")
+                        user_data = tw_spreadsheet.get_twitter_spreadsheet_column(TW_GAINED_SHEET_ID,matched_info[2],matched_info[1],insights,chanel_insights['followers_count'], matched_info[4])
+                        # print(user_data)
+                        # update client sheet with twitter monthly insights
+                        # Access using get
+                        current_month = insights.get('current_month', {})
+                        views = current_month.get('views', 0)
+                        engagements = current_month.get('engagements', 0)
+                        brand_cur = 'DEFAULT'
+                        if account[0] == "TW2":
+                            print("its a badsha...")
+                            brand_cur = f"{matched_info[1]} {matched_info[10]}"
+                        else:
+                            brand_cur = f"{matched_info[2]} {matched_info[10]}"
+
+                        
+                        client_helper._process_data(
+                            brand_cur, CLIENT_SHEET_ID, matched_info[9], client_sheet, 
+                            [chanel_insights['followers_count'], views, engagements]
+                        )
+                        #process twitter posts insights
+                        twitter_helper = TwitterHelper(current_year_media)
+                        twitter_helper.process_twitter_insights_by_page_id(
+                            account[0], chanel_insights['followers_count'], current_year_media, matched_info, tw_spreadsheet
+                        )
+                    else:
+                        print(f"No matched info found for YouTube channel: {account[0]}")
+                        continue
+
+                    print("\nCurrent Year Insights:")
+                    print(f"Total Posts: {insights['total']['posts']}")
+                    print(f"Total Views: {insights['total']['views']}")
+                    print(f"Total Engagements: {insights['total']['engagements']}")
+                    print(f"Avg Views/Post: {insights['total']['avg_views']:.1f}")
+                    print(f"Avg Engagements/Post: {insights['total']['avg_engagements']:.1f}")
+                    
+                    print("\nMonthly Breakdown:")
+                    for month, stats in insights['monthly'].items():
+                        print(f"{month}: {stats['posts']} posts, {stats['views']} views")
+                    
+                    print("\nCurrent Month Stats:")
+                    print(json.dumps(insights['current_month'], indent=2))
+                
+                else:
+                    print("No current year media found.")
+                    insights = {
+                            "current_month": {
+                                "views": 0,
+                                "engagements": 0
+                            }
+                        }
+                    tw_spreadsheet.get_twitter_spreadsheet_column(TW_GAINED_SHEET_ID,matched_info[2],matched_info[1],insights,chanel_insights['followers_count'], matched_info[4])
+
+            
+        else:
+            print(f"Skipping YouTube processing for account: {account[0]}")
+
+
+
+
+
+        ## OLD VERSION OF THE CODE
         # #commented for now for ig development
         # # 3. Process insights for ALL pages while maintaining associations
         # all_insights = facebookController.process_all_pages_insights(posts_data)
