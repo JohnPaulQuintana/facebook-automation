@@ -257,6 +257,7 @@ class SpreadsheetController:
         difference = total_followers - value_in_column_e
 
         values_only = [
+            insights.get('page_daily_follows_day', 0),
             insights.get('page_post_engagements_day', 0),
             insights.get('page_post_engagements_monthly', 0),
             insights.get('yearly_page_post_engagements', 0),
@@ -273,7 +274,7 @@ class SpreadsheetController:
             insights.get('new_likes_today', 0),
         ]
 
-        all_values = [[today_str], [total_followers], [difference]] + [[v] for v in values_only]
+        all_values = [[today_str], [total_followers]] + [[v] for v in values_only]
 
         # Batch update all values from D{currency_row_index-1} to D{currency_row_index+15}
         data = [

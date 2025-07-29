@@ -58,6 +58,28 @@ def get_date_range_from_env():
 
     return int(since_date.timestamp()), int(until_date.timestamp())
 
+def get_currency(currency, brand):
+    curr = None
+    if currency == "PKR" and brand=='BAJI':
+        curr = "bajilive.casino"
+    elif currency == "NPR" and brand=='BAJI':
+        curr = "baji.sports"
+    elif currency == "BDT" and brand=='JEETBUZZ':
+        curr="jeetbuzzcasino"
+    elif currency=="INR" and brand=="JEETBUZZ":
+        curr="jeetbuzzsports"
+    elif currency=="PKR" and brand=="SIX6S":
+        curr="six6s.sport"
+    elif currency=="INR" and brand=="SIX6S":
+        curr="six6s.casino"
+    return curr
+
+def extract_sheet_id(url: str) -> str:
+    match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
+    if match:
+        return match.group(1)
+    raise ValueError("Invalid Google Sheets URL")
+
 def main():
     print("Begin the automation for followers gain....")
 
@@ -181,7 +203,7 @@ def main():
                         print("------------------------------------------------------------------------------")
 
                         #processing ig page insights
-                        ig_spreadsheet.get_ig_spreadsheet_column(IG_GAINED_SHEET_ID,brand,currency,ig_page_insights,ig_page_insights[0].get('followers_count', 0), PAGE_TYPE)        
+                        ig_spreadsheet.get_ig_spreadsheet_column(IG_GAINED_SHEET_ID,brand,get_currency(currency,brand),ig_page_insights,ig_page_insights[0].get('followers_count', 0), PAGE_TYPE)        
 
                         #update client sheet
                         # Access monthly insights safely
@@ -256,26 +278,26 @@ def main():
             
 
             # # INSTAGRAM
-            # ig_posts_data = ig_Controller.fetch_all_ig_posts(page_tokens, start_date)
-            # print("This is IG POST...")
-            # all_ig_insights = ig_Controller.process_all_post_insights(ig_posts_data)
-            # # Send to ig helper to process insights
-            # ig_helper = IGHELPER(all_ig_insights)
-            # print("This is IG HELPER...")
-            # sorted_data = ig_helper.get_sorted_posts(True)
-            # ig_helper.process_ig_insights_by_ig_id(sorted_data, pages_info, ig_spreadsheet)
+            ig_posts_data = ig_Controller.fetch_all_ig_posts(page_tokens, start_date)
+            print("This is IG POST...")
+            all_ig_insights = ig_Controller.process_all_post_insights(ig_posts_data)
+            # Send to ig helper to process insights
+            ig_helper = IGHELPER(all_ig_insights)
+            print("This is IG HELPER...")
+            sorted_data = ig_helper.get_sorted_posts(True)
+            ig_helper.process_ig_insights_by_ig_id(sorted_data, pages_info, ig_spreadsheet)
 
 
 
             # # FACEBBOOK
-            # posts_data = facebookController.fetch_all_posts_for_pages(page_tokens, start_date, today_date)
-            # all_facebook_insights = facebookController.process_all_pages_insights(posts_data)
-            # #Send to facebook helper to process insights
-            # print("This is FACEBOOK HELPER...")
-            # facebook_helper = FacebookHelper(all_facebook_insights)
-            # sorted_data = facebook_helper.get_sorted_posts(True)
-            # facebook_helper.process_facebook_insights_by_page_id(sorted_data, pages_info, spreadsheet)
-            # # print(sorted_data)
+            posts_data = facebookController.fetch_all_posts_for_pages(page_tokens, start_date, today_date)
+            all_facebook_insights = facebookController.process_all_pages_insights(posts_data)
+            #Send to facebook helper to process insights
+            print("This is FACEBOOK HELPER...")
+            facebook_helper = FacebookHelper(all_facebook_insights)
+            sorted_data = facebook_helper.get_sorted_posts(True)
+            facebook_helper.process_facebook_insights_by_page_id(sorted_data, pages_info, spreadsheet)
+            # print(sorted_data)
 
         #YOUTUBE
         if account[0].startswith("YT"):
@@ -301,11 +323,15 @@ def main():
                         )
                 
                 #process youtube posts insights
-                # yt_spreadsheet.transfer_video_insight_data()
-                # youtube_helper = YoutubeHelper(chanel_insights.get("video_insights", []))
-                # youtube_helper.process_youtube_insights_by_page_id(
-                #     account[0], chanel_insights, matched_info, yt_spreadsheet
-                # )
+                ## yt_spreadsheet.transfer_video_insight_data(extract_sheet_id(matched_info[7]), matched_info[1], chanel_insights.get("video_insights", []), chanel_insights.get("channel", {}).get("subscribers", 0))
+                if chanel_insights and isinstance(chanel_insights.get("video_insights"), list):
+                    youtube_helper = YoutubeHelper(chanel_insights["video_insights"])
+                    youtube_helper.process_youtube_insights_by_page_id(
+                        account[0], chanel_insights, matched_info, yt_spreadsheet
+                    )
+                else:
+                    print(f"⚠️ Skipping YouTube for {account[0]} — no valid video insights.")
+
             else:
                 print(f"No matched info found for YouTube channel: {account[0]}")
                 continue
@@ -318,6 +344,8 @@ def main():
             print(chanel_insights)
             if chanel_insights:
                 rest_id = chanel_insights['rest_id']
+                # use this if the account is new to get the total
+                # current_year_media = twitter_Controller.get_current_year_media(account[3],rest_id)
                 current_year_media = twitter_Controller.get_current_month_media(account[3],rest_id)
                 #mathe the code for youtube channel
                 matched_info = next((item for item in pages_sp if item[0] == account[0]), None)
@@ -368,9 +396,9 @@ def main():
                     print(f"Avg Views/Post: {insights['total']['avg_views']:.1f}")
                     print(f"Avg Engagements/Post: {insights['total']['avg_engagements']:.1f}")
                     
-                    print("\nMonthly Breakdown:")
-                    for month, stats in insights['monthly'].items():
-                        print(f"{month}: {stats['posts']} posts, {stats['views']} views")
+                    # print("\nMonthly Breakdown:")
+                    # for month, stats in insights['monthly'].items():
+                    #     print(f"{month}: {stats['posts']} posts, {stats['views']} views")
                     
                     print("\nCurrent Month Stats:")
                     print(json.dumps(insights['current_month'], indent=2))

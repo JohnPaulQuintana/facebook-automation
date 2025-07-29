@@ -25,7 +25,14 @@ class TwitterController:
         """Fetch channel insights for a given date range channel level."""
         params = {"screenname": username}
         response = requests.get(self.base_url+"screenname.php", headers=self.headers, params=params)
-        user_data = response.json()
+        # user_data = response.json()
+        try:
+            user_data = response.json()
+        except ValueError:
+            print(f"[ERROR] Failed to decode JSON for user: {username}")
+            print(f"[DEBUG] Status Code: {response.status_code}")
+            print(f"[DEBUG] Response Text: {response.text[:200]}")  # print first 200 chars
+            return None
         # print(user_data)
         if response.status_code == 200 and "status" in user_data:
             
@@ -42,15 +49,18 @@ class TwitterController:
             print("Error fetching user data:", user_data.get("message", "Unknown error"))
             return None
         
-    #focusing on current month timeline
-    def get_current_month_media(self,username, rest_id):
+    # #focusing on current month timeline
+    # def get_current_month_media(self,username, rest_id):
         """
         Fetches ALL media posts for current month (not just most recent)
         Maintains same output format as yearly version
         """
-        now = datetime.now()
-        current_year = now.year
-        current_month = now.month
+        # original but today value
+        # now = datetime.now() 
+        yesterday = datetime.now() - timedelta(days=1)
+
+        current_year = yesterday.year
+        current_month = yesterday.month
         current_month_media = []
         cursor = None
         page_count = 0
@@ -98,6 +108,168 @@ class TwitterController:
         print(f"\nFound {len(current_month_media)} posts for {current_year}-{current_month:02d}")
         return current_month_media
 
+    #added 09/07/2025
+    def get_current_month_media(self, username, rest_id):
+        """
+        Fetches all media posts within the last 30 days.
+        Adds 'post_age' and saves the result to JSON before returning.
+        """
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        yesterday = datetime.now() - timedelta(days=1)
+
+        rolling_window_media = []
+        cursor = None
+        page_count = 0
+        posts_processed = 0
+
+        print(f"\nFetching media posts from {start_date.date()} to {end_date.date()}...")
+
+        while True:
+            params = {"screenname": username, "rest_id": rest_id}
+            if cursor:
+                params["cursor"] = cursor
+
+            try:
+                response = requests.get(self.base_url + "timeline.php", headers=self.headers, params=params, timeout=10)
+                response.raise_for_status()
+                raw_data = response.json()
+
+                page_media = self.process_media_response(raw_data)
+                posts_processed += len(page_media)
+
+                stop_pagination = False
+
+                for media in page_media:
+                    try:
+                        post_time = datetime.strptime(media['created_at'], "%Y/%m/%d")
+                    except Exception as e:
+                        print(f"\nSkipping post due to date parse error: {e}")
+                        continue
+
+                    # Stop pagination if older than the 30-day window
+                    if post_time < start_date:
+                        stop_pagination = True
+                        break
+
+                    if start_date <= post_time <= end_date:
+                        # Add indicator and post age in days
+                        media["indicator"] = "month"
+                        media["post_age"] = (end_date - post_time).days
+                        rolling_window_media.append(media)
+
+                print(f"\rPages: {page_count + 1} | 30-day Posts: {len(rolling_window_media)} | Scanned: {posts_processed}", end="", flush=True)
+
+                cursor = self.extract_cursor(raw_data)
+                if not cursor or stop_pagination:
+                    break
+
+                page_count += 1
+                sleep(2)
+
+            except Exception as e:
+                print(f"\nError: {str(e)}")
+                break
+
+        # Save to JSON
+        # try:
+        #     output_path = "media_posts.json"
+        #     with open(output_path, "w", encoding="utf-8") as f:
+        #         json.dump(rolling_window_media, f, ensure_ascii=False, indent=2)
+        #     print(f"\nSaved {len(rolling_window_media)} posts to {output_path}")
+        # except Exception as e:
+        #     print(f"\nError saving JSON: {e}")
+
+        return rolling_window_media
+        
+    #run this when the account is new to get the total
+    def get_current_year_media(self, username, rest_id):
+        """
+        Fetches all media posts within the last 30 days
+        Maintains same output format as yearly version
+        """
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        
+        yesterday = datetime.now() - timedelta(days=1)
+
+        current_year = yesterday.year
+        current_month = yesterday.month
+
+        rolling_window_media = []
+        cursor = None
+        page_count = 0
+        posts_processed = 0
+
+        print(f"\nFetching media posts from {start_date.date()} to {end_date.date()}...")
+
+        while True:
+            params = {"screenname": username, "rest_id": rest_id}
+            if cursor:
+                params["cursor"] = cursor
+
+            try:
+                response = requests.get(self.base_url + "timeline.php", headers=self.headers, params=params, timeout=10)
+                response.raise_for_status()
+                raw_data = response.json()
+
+                page_media = self.process_media_response(raw_data)
+                posts_processed += len(page_media)
+
+                stop_pagination = False
+                post_time = None
+                for media in page_media:
+                    # print(media)
+                    try:
+                        # post_time = datetime.strptime(media['created_at'], "%a %b %d %H:%M:%S %z %Y")
+                        # Parse it
+                        post_time = datetime.strptime(media['created_at'], "%Y/%m/%d")
+                    except Exception as e:
+                        # print(start_date, post_time, end_date)
+                        print(f"\nSkipping post due to date parse error: {e}")
+                        continue
+
+                    # Convert to naive datetime (UTC) for comparison
+                    # post_time_naive = post_time.replace(tzinfo=None)
+                    # print("Timezone:", start_date, post_time, end_date)
+
+                    if media['year'] == current_year:
+
+                        # adding labels
+                        if start_date <= post_time <= end_date:
+                            media["indicator"] = "month"
+                        else:
+                            media["indicator"] = "year"
+
+                        # print("==============================================")
+                        # print(media)
+                        rolling_window_media.append(media)
+
+
+                    elif (media['year'] < current_year):
+                        stop_pagination = True
+
+                    # if start_date <= post_time <= end_date:
+                    #     rolling_window_media.append(media)
+                    # elif post_time < start_date:
+                    #     stop_pagination = True  # We've passed the target window
+
+                print(f"\rPages: {page_count + 1} | 30-day Posts: {len(rolling_window_media)} | Scanned: {posts_processed}", end="", flush=True)
+
+                cursor = self.extract_cursor(raw_data)
+                if not cursor or stop_pagination:
+                    break
+
+                page_count += 1
+                sleep(2)
+
+            except Exception as e:
+                print(f"\nError: {str(e)}")
+                break
+
+        print(f"\nFound {len(rolling_window_media)} posts from the last 30 days.")
+        return rolling_window_media
+    
     def process_media_response(self,raw_data):
         """Processes a single page of media response"""
         media_metrics = []
@@ -175,18 +347,22 @@ class TwitterController:
             print(f"Error extracting cursor: {str(e)}")
             return None
         
-    def analyze_current_year_metrics(self,media_data):
+    def analyze_current_year_metrics(self, media_data):
         """Analyzes metrics specifically for current year data"""
         if not media_data:
             return {}
-            
-        now = datetime.now()
-        current_year = now.year
-        current_month = now.month
-        yesterday = now.date() - timedelta(days=1)
+
+        yesterday = datetime.now().date() - timedelta(days=1)
+        current_year = yesterday.year
+        current_month = yesterday.month
+        current_month_key = f"{current_year}/{current_month:02d}"
 
         results = {
-            'monthly': {},
+            'monthly': {
+                'posts': 0,
+                'views': 0,
+                'engagements': 0
+            },  # stores all months e.g., '2025/06': {...}
             'total': {
                 'posts': 0,
                 'views': 0,
@@ -203,36 +379,32 @@ class TwitterController:
                 'engagements': 0
             }
         }
-        
+
         for media in media_data:
-            # Aggregate totals
+            # Parse views + engagement
             views = int(media.get('views', 0) or 0)
             engagements = sum(media['engagements'].values())
-            
+
+            # Totals
             results['total']['posts'] += 1
             results['total']['views'] += views
             results['total']['engagements'] += engagements
-            
-            # Monthly breakdown
-            month_key = f"{media['year']}/{media['month']:02d}"
-            if month_key not in results['monthly']:
-                results['monthly'][month_key] = {
-                    'posts': 0,
-                    'views': 0,
-                    'engagements': 0
-                }
-            results['monthly'][month_key]['posts'] += 1
-            results['monthly'][month_key]['views'] += views
-            results['monthly'][month_key]['engagements'] += engagements
-            
-            # Current month stats
-            if media['month'] == current_month:
-                results['current_month']['posts'] += 1
-                results['current_month']['views'] += views
-                results['current_month']['engagements'] += engagements
 
+            # Monthly key
+            # month_key = f"{media['year']}/{media['month']:02d}"
+            # if month_key not in results['monthly']:
+            #     results['monthly'][month_key] = {
+            #         'posts': 0,
+            #         'views': 0,
+            #         'engagements': 0
+            #     }
 
-            # Daily (yesterday) stats
+            if media["indicator"] == "month":
+                results['monthly']['posts'] += 1
+                results['monthly']['views'] += views
+                results['monthly']['engagements'] += engagements
+
+            # Daily check
             try:
                 media_date = datetime.strptime(media.get("created_at", ""), "%Y/%m/%d").date()
                 if media_date == yesterday:
@@ -240,14 +412,17 @@ class TwitterController:
                     results['yesterday']['views'] += views
                     results['yesterday']['engagements'] += engagements
             except Exception:
-                continue  # skip malformed dates
+                continue
 
-        # Calculate averages
+        # Extract current month's values from the monthly map
+        results['current_month'] = results['monthly']
+
+        # Averages
         if results['total']['posts'] > 0:
             results['total']['avg_views'] = results['total']['views'] / results['total']['posts']
             results['total']['avg_engagements'] = results['total']['engagements'] / results['total']['posts']
         else:
             results['total']['avg_views'] = 0
             results['total']['avg_engagements'] = 0
-        
+
         return results

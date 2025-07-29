@@ -264,13 +264,14 @@ for handle in CHANNEL_HANDLES:
     # Load and fetch analytics
     creds = load_credentials(token_path)
     today = date.today()
+    yesterday2 = today - timedelta(days=1)
     yesterday = today - timedelta(days=1)
     start_month = yesterday.replace(day=1)
     start_year = yesterday.replace(month=1, day=1)
 
     print(start_month, start_year, yesterday)
     # page level insights
-    fetch_video_insights(creds, "daily", yesterday, yesterday)
+    fetch_video_insights(creds, "daily", yesterday, yesterday2)
     fetch_video_insights(creds, "monthly", start_month, yesterday)
     fetch_video_insights(creds, "yearly", start_year, yesterday)
 

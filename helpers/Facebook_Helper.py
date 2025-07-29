@@ -29,6 +29,23 @@ class FacebookHelper:
     def get_sorted_posts(self, reverse: bool = False):
         return sorted(self.posts, key=lambda x: x["created_time"], reverse=reverse)
     
+
+    def get_currency(self, currency, brand):
+        curr = None
+        if currency == "PKR" and brand=='BAJI':
+            curr = "bajilive.casino"
+        elif currency == "NPR" and brand=='BAJI':
+            curr = "baji.sports"
+        elif currency == "BDT" and brand=='JEETBUZZ':
+            curr="jeetbuzzcasino"
+        elif currency=="INR" and brand=="JEETBUZZ":
+            curr="jeetbuzzsports"
+        elif currency=="PKR" and brand=="SIX6S":
+            curr="six6s.sport"
+        elif currency=="INR" and brand=="SIX6S":
+            curr="six6s.casino"
+        return curr
+    
     def process_facebook_insights_by_page_id(self, all_insights, pages_info, spreadsheet) -> bool:
         try:
             
@@ -65,7 +82,7 @@ class FacebookHelper:
 
                 try:
                     # spreadsheet.transfer_insight_header_only(spreadsheet_id, CURRENCY, insights)
-                    spreadsheet.transfer_insight_data(spreadsheet_id, CURRENCY, insights, FOLLOWERS)
+                    spreadsheet.transfer_insight_data(spreadsheet_id, self.get_currency(CURRENCY, BRAND), insights, FOLLOWERS)
                     spreadsheet.hide_old_rows(spreadsheet_id, CURRENCY)
 
                     print(f"✅ Insight data transfer completed for {BRAND} (IG {page_id}) Followers: {FOLLOWERS}")

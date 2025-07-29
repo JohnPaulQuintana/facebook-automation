@@ -25,6 +25,23 @@ class IGHELPER:
             "reactions": insights.get("reactions", 0)
         }
     
+
+    def get_currency(self, currency, brand):
+        curr = None
+        if currency == "PKR" and brand=='BAJI':
+            curr = "bajilive.casino"
+        elif currency == "NPR" and brand=='BAJI':
+            curr = "baji.sports"
+        elif currency == "BDT" and brand=='JEETBUZZ':
+            curr="jeetbuzzcasino"
+        elif currency=="INR" and brand=="JEETBUZZ":
+            curr="jeetbuzzsports"
+        elif currency=="PKR" and brand=="SIX6S":
+            curr="six6s.sport"
+        elif currency=="INR" and brand=="SIX6S":
+            curr="six6s.casino"
+        return curr
+
     # Returns a list of all posts (NOT USED)
     def get_all_posts(self):
         return self.posts
@@ -91,8 +108,8 @@ class IGHELPER:
 
                 try:
                     # spreadsheet.transfer_insight_header_only(spreadsheet_id, CURRENCY, insights)
-                    spreadsheet.transfer_insight_data(spreadsheet_id, CURRENCY, insights, FOLLOWERS)
-                    spreadsheet.hide_old_rows(spreadsheet_id, CURRENCY)
+                    spreadsheet.transfer_insight_data(spreadsheet_id, self.get_currency(CURRENCY, BRAND), insights, FOLLOWERS)
+                    spreadsheet.hide_old_rows(spreadsheet_id, self.get_currency(CURRENCY, BRAND))
 
                     print(f"✅ Insight data transfer completed for {BRAND} (IG {ig_id}) Followers: {FOLLOWERS}")
                 except Exception as e:

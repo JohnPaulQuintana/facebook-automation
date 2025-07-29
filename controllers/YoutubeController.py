@@ -41,7 +41,9 @@ class YoutubeController:
         ).execute()
 
         rows = response.get("rows", [])
-
+        print("=====================================================================================")
+        print(rows)
+        print("=====================================================================================")
         totals = {
             "label": label,
             "start_date": start_date.isoformat(),
@@ -205,17 +207,40 @@ class YoutubeController:
         
         creds = self.load_credentials(f"{token}.pkl")
         today = dt.today()
-        yesterday = today - timedelta(days=1)
+        yesterday1 = today - timedelta(days=1)
+        yesterday = today - timedelta(days=2)  # was `yesterday = today - timedelta(days=1)`
         start_month = yesterday.replace(day=1)
         start_year = yesterday.replace(month=1, day=1)
 
+        # target_date = dt(2025, 7, 5)  # to handle the skiped date issue
+
+        print(yesterday, start_month, start_year)
+    
         # Fetch channel info (basic stats)
         channel_info = self.get_channel_info(username,api_key)
         time.sleep(1)  # To avoid hitting API rate limits
+
+        # Fetch insights for skiped date issue
+        # daily_insights = self.fetch_channel_insights(creds, "daily", target_date, target_date)
+        # monthly_insights = self.fetch_channel_insights(creds, "monthly", start_month, target_date)
+        # yearly_insights = self.fetch_channel_insights(creds, "yearly", start_year, target_date)
+
         # Fetch insights
-        daily_insights = self.fetch_channel_insights(creds, "daily", yesterday, yesterday)
+        daily_insights = self.fetch_channel_insights(creds, "daily", yesterday, yesterday1)
+        print("=====================================================================================")
+        print("This is Daily Insights:")
+        print(daily_insights)
+        print("=====================================================================================")
         monthly_insights = self.fetch_channel_insights(creds, "monthly", start_month, yesterday)
+        print("=====================================================================================")
+        print("This is Monhtly Insights:")
+        print(monthly_insights)
+        print("=====================================================================================")
         yearly_insights = self.fetch_channel_insights(creds, "yearly", start_year, yesterday)
+        print("=====================================================================================")
+        print("This is Yearly Insights:")
+        print(yearly_insights)
+        print("=====================================================================================")
 
         #get all the videos with insights
         video_insights = self.fetch_all_video_with_insights(creds)

@@ -92,13 +92,17 @@ class IGController:
         until = today.strftime('%Y-%m-%d')
         return self.fetch_insights_for_period(object_id, access_token, since, until)
     
-    #get monthly insights for IG page
-    def fetch_monthly_insights(self,object_id, access_token):
+    # Get monthly insights for IG page (correctly up to yesterday)
+    def fetch_monthly_insights(self, object_id, access_token):
         today = datetime.now(timezone.utc).date()
-        first_day_of_month = today.replace(day=1)
+        yesterday = today - timedelta(days=1)
+        first_day_of_month = yesterday.replace(day=1)
+
         since = first_day_of_month.strftime('%Y-%m-%d')
-        until = today.strftime('%Y-%m-%d')
+        until = yesterday.strftime('%Y-%m-%d')
+
         return self.fetch_insights_for_period(object_id, access_token, since, until)
+
 
     # get yearly insights for IG page
     def get_yearly_metrics(self, object_id, access_token):

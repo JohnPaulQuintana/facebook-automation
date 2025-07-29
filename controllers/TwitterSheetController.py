@@ -190,6 +190,7 @@ class TwitterSpreadsheetController:
         print("Updating sheet values...")
         sheet = service.spreadsheets()
 
+        print("Values yesterday:")
         print(value_in_column_objects)
         # Values
         #default is 0 if negative
@@ -199,14 +200,40 @@ class TwitterSpreadsheetController:
         print(insights['current_month']['engagements'])
         #daily engagements
 
+        # print(f"Total Views: {insights['total']['views']}")
+        # print(f"Total Engagements: {insights['total']['engagements']}")
+        # updates 21/07/2025
+        # Calculate safe deltas (clamped at 0 to avoid drops)
+        daily_engaged = max(0, insights['current_month']['engagements'] - value_in_column_objects['monthly_engaged'])
+        daily_views = max(0, insights['current_month']['views'] - value_in_column_objects['monthly_views'])
+
         values_only = [
-            insights['current_month']['engagements'] - value_in_column_objects['monthly_engaged'],  # DAILY ENGAGEMENTS
-            insights['current_month']['engagements'],  # MONTHLY ENGAGEMENTS
-            (insights['current_month']['engagements'] - value_in_column_objects['monthly_engaged']) + value_in_column_objects['yearly_engaged'],  # TOTAL ENGAGEMENTS
-            insights['current_month']['views'] - value_in_column_objects['monthly_views'],  # DAILY IMPRESSIONS
-            insights['current_month']['views'],  # MONTHLY IMPRESSIONS
-            (insights['current_month']['views'] - value_in_column_objects['monthly_views']) + value_in_column_objects['yearly_views'],  # TOTAL IMPRESSIONS
+            # # DAILY ENGAGEMENTS = Today - Yesterday
+            # insights['current_month']['engagements'] - value_in_column_objects['monthly_engaged'],
+            # DAILY ENGAGEMENTS
+            daily_engaged,
+            # MONTHLY ENGAGEMENTS (up to today)
+            insights['current_month']['engagements'],
+
+            # # YEARLY ENGAGEMENTS = Daily + Previously Saved Yearly Value
+            # (insights['current_month']['engagements'] - value_in_column_objects['monthly_engaged']) + value_in_column_objects['yearly_engaged'],
+            # YEARLY ENGAGEMENTS (add daily delta to previously saved value)
+            value_in_column_objects['yearly_engaged'] + daily_engaged,
+
+            # # DAILY IMPRESSIONS = Today - Yesterday
+            # insights['current_month']['views'] - value_in_column_objects['monthly_views'],
+            # DAILY IMPRESSIONS
+            daily_views,
+
+            # MONTHLY IMPRESSIONS
+            insights['current_month']['views'],
+
+            # # YEARLY IMPRESSIONS = Daily + Previously Saved Yearly Value
+            # (insights['current_month']['views'] - value_in_column_objects['monthly_views']) + value_in_column_objects['yearly_views'],
+            # YEARLY IMPRESSIONS (add daily delta to previously saved value)
+            value_in_column_objects['yearly_views'] + daily_views,
         ]
+
 
         all_values = [[today_str], [total_followers], [difference]] + [[v] for v in values_only]
 
