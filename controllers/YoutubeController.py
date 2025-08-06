@@ -208,7 +208,7 @@ class YoutubeController:
         creds = self.load_credentials(f"{token}.pkl")
         today = dt.today()
         yesterday1 = today - timedelta(days=1)
-        yesterday = today - timedelta(days=2)  # was `yesterday = today - timedelta(days=1)`
+        yesterday = today - timedelta(days=1)  # was `yesterday = today - timedelta(days=1)`
         start_month = yesterday.replace(day=1)
         start_year = yesterday.replace(month=1, day=1)
 

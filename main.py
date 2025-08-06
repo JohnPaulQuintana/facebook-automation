@@ -59,6 +59,10 @@ def get_date_range_from_env():
     return int(since_date.timestamp()), int(until_date.timestamp())
 
 def get_currency(currency, brand):
+    print("-------------------------")
+    print(currency, brand)
+    print("-------------------------")
+
     curr = None
     if currency == "PKR" and brand=='BAJI':
         curr = "bajilive.casino"
@@ -72,6 +76,9 @@ def get_currency(currency, brand):
         curr="six6s.sport"
     elif currency=="INR" and brand=="SIX6S":
         curr="six6s.casino"
+    elif currency=="BDT" and brand=="BADSHA":
+        curr="BDT"
+        
     return curr
 
 def extract_sheet_id(url: str) -> str:
